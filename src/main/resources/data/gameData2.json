@@ -1,0 +1,11 @@
+{
+  "GameName":"Roulette",
+  "ProviderName": "CasinoGames",
+  "Stars": 4,
+  "NoOfVotes": 2,
+  "GameLogo": "/usr/bin/images/gameLogo.png",
+  "MinBet": 7,
+  "MaxBet":45,
+  "RiskLevel": "low",
+  "HashKey": "key"
+}
