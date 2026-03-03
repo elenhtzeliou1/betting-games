@@ -9,8 +9,9 @@ import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-
+import java.util.Map;
 
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
@@ -19,7 +20,7 @@ import org.json.simple.parser.JSONParser;
 public class MasterServer {
     // MasterServer needs to keep his worker
     // and also needs to keep player balance's
-    // Also nees to hold the reducer
+    // Also needs to hold the reducer
 
     private static final List<Worker> workers = new ArrayList<>();
     // Map<String,PlayerState> playersById (balance)
@@ -27,10 +28,21 @@ public class MasterServer {
     //
     //
 
+    //-------------------- Reducer Info----------------//
+    private static String reducerHost = "localhost";
+    private static int reducerPort = 7000;
+    //-------------------------------------------------//
+
+    private static final Map<String,String> pendingReduceResults = new HashMap<>();
+    private static final Object reduceLock = new Object();
+
+    // callback port (masterPort + 1)
+    private static int callbackPort = 5001; // set in main after parsing masterPort
+
     public static void main(String[] args) {
         //Helping Message
         if (args.length < 2) {
-            System.out.println("Usage: java MasterServer <masterPort> <WorkerHost:port> [workerHost:prot] ... ");
+            System.out.println("Usage: java MasterServer <masterPort> <WorkerHost:port> [workerHost:port] ... ");
             System.out.println("Example: java MasterServer 5000 localhost:6001 localhost:6003");
             return;
         }
@@ -43,7 +55,12 @@ public class MasterServer {
             int port = Integer.parseInt(hostAndPort[1]);
             workers.add(new Worker(host,port));
         }
+        // Callback Port for reducer
+        callbackPort = masterPort+1;
+        new Thread(()-> startReducerCallbackServer(callbackPort)).start();
+        System.out.println("[MasterServer] Reducer callback listening on port: "+callbackPort);
 
+        // Worker List:
         System.out.println("[MasterServer] Workers: "+ workers);
 
 
@@ -51,12 +68,14 @@ public class MasterServer {
             System.out.println("[MasterServer] Listening on port: "+ masterPort);
 
             while(true){
+                //connect with multiple clients (Managers & Players)
+                // MultiThreaded MasterServer
                 Socket socket = serverSocket.accept();
                 System.out.println("[MasterServer] accepted client connection from: "
                         + socket.getInetAddress().getHostAddress() +":"+socket.getPort()
                 );
 
-                //drop client if no communication after 15min
+                // drop client if no communication after 15min
                 socket.setSoTimeout(900_000);
                 new Thread(() -> handleClientRequest(socket)).start();
             }
@@ -246,10 +265,25 @@ public class MasterServer {
             output.println("END");
             return;
 
+        }else if(inputString.startsWith("FIND_PROVIDER_PROFIT_LOSS ")){
+            String providerName = inputString.substring("FIND_PROVIDER_PROFIT_LOSS ".length()).trim();
+            if(providerName.isBlank()){
+                output.println("ERROR: Provider Name is Required!");
+                output.println("END");
+                return;
+            }
+
+            gatherProviderProfit(providerName, reducerHost, reducerPort, output);
+            return;
         }
 
         output.println("ERROR unknown manager command");
         output.println("END");
+
+        //
+        //
+        //
+        //
 
     }
 
@@ -258,28 +292,36 @@ public class MasterServer {
     private static void handlePlayerLogic(String inputString,PrintWriter output){
         if(inputString.startsWith("SEARCH ")){
 
-            //
-            //
-            output.println("END");
+            handlePlayerSearch(inputString,output);
             return;
         }
-        if(inputString.startsWith("PLAY ")){
-
-            //
-            //
-            output.println("END");
-            return;
-        }
-
-        if(inputString.startsWith("ADD_BALANCE ")){
+        else if(inputString.startsWith("PLAY ")){
 
             //
             //
             output.println("END");
             return;
         }
+        else if(inputString.startsWith("ADD_BALANCE ")){
 
-        output.println("ERROR unkown player command");
+            //
+            //
+            output.println("END");
+            return;
+        }
+        else if (inputString.equalsIgnoreCase("FETCH_ALL_AVAILABLE_GAMES")){
+            String workerResponseStr = fetchAllAvailableGames();
+
+            //Send reply to player
+            for(String ln: workerResponseStr.split("\n")){
+                if(!ln.isBlank()) output.println(ln);
+            }
+            output.println("END");
+            return;
+        }
+
+
+        output.println("ERROR unknown player command");
         output.println("END");
     }
 
@@ -332,5 +374,175 @@ public class MasterServer {
         return gameNames.length() ==0 ? "NO GAMES YET!\n" :  gameNames.toString();
     }
 
+
+    private static void gatherProviderProfit(String providerName, String reducerHost, int reducerPost, PrintWriter output){
+
+        String jobId = java.util.UUID.randomUUID().toString();
+
+        // How many workers should reach the reducer
+        int expectedWorkers = workers.size();
+
+        // 1. Map: ask all workers to send partials to reducer
+        for(Worker worker: workers){
+            forwardMsgToWorker(worker, "MAP_PROVIDER_PROFIT "+jobId +"|" + providerName +"|" +reducerHost +"|"+reducerPost+"|"+ expectedWorkers);
+        }
+
+        // 2. Wait for reducer to push REDUCE_RESULT back here (here to MasterServer)
+        String key = "PROVIDER_PROFIT|"+jobId;
+        String finalJson;
+
+        synchronized (reduceLock){
+            while(!pendingReduceResults.containsKey(key)) {
+                try {
+                    reduceLock.wait();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            finalJson = pendingReduceResults.remove(key);
+        }
+        if (finalJson == null){
+            output.println("ERROR: No reduce result!");
+            output.println("END");
+            return;
+        }
+        output.println(finalJson); //JSON includes per-game + Total
+        output.println("END");
+
+
+    }
+
+
+    private static String fetchAllAvailableGames(){
+        StringBuilder availableGame = new StringBuilder();
+
+        for(Worker worker: workers){
+            String workerResponse = forwardMsgToWorker(worker, "FETCH_ALL_AVAILABLE_GAMES");
+            if (workerResponse == null || workerResponse.isBlank())continue;
+
+            for(String ln : workerResponse.split("\n")){
+                ln = ln.trim();
+                if( !ln.isBlank())availableGame.append(ln).append("\n");
+            }
+
+        }
+        return availableGame.length() ==0 ? "NO AVAILABLE GAMES YET!\n": availableGame.toString();
+    }
+
+
+    private static void startReducerCallbackServer(int port){
+        try(ServerSocket serverSocket = new ServerSocket(port)){
+            while(true){
+                Socket socket = serverSocket.accept();
+                new Thread(()-> handleReducerPush(socket)).start();
+            }
+        }catch (Exception e){
+            System.out.println("[MasterServer] Reducer-callback server error: "+e.getMessage());
+        }
+    }
+
+    /*
+     * Receives pushed reduce results from Reducer.
+     * Protocol:
+     *   REDUCE_SEARCH_RESULT jobId
+     *   GAME|...
+     *   GAME|...
+     *   END
+     */
+
+    private static void handleReducerPush(Socket socket){
+        try(socket;
+            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            PrintWriter output = new PrintWriter(socket.getOutputStream(),true))
+        {
+            String header = input.readLine();
+            if(header ==null)return;
+            header = header.trim();
+
+            StringBuilder stringBuilder = new StringBuilder();
+            String line;
+            while((line=input.readLine())!=null){
+                if("END".equals(line)) break;
+                stringBuilder.append(line).append("\n");
+            }
+
+            if (header.startsWith("REDUCE_SEARCH_RESULT ")) {
+                String jobId = header.substring("REDUCE_SEARCH_RESULT ".length()).trim();
+                String key = "SEARCH|" + jobId;
+
+                synchronized (reduceLock) {
+                    pendingReduceResults.put(key, stringBuilder.toString().trim());
+                    reduceLock.notifyAll(); // wake waiting player thread
+                }
+                output.println("ACK");
+                return;
+            }
+
+            output.println("ERROR unknown reducer push: " + header);
+
+
+
+
+        }catch (Exception ignored){}
+
+    }
+
+
+    private static void handlePlayerSearch(String inputString, PrintWriter output){
+        String payload = inputString.substring("SEARCH ".length()).trim();
+        String[] parts = payload.split("\\|");
+        if (parts.length != 4) {
+            output.println("ERROR bad SEARCH format. Expected: playerId|minStars|betCategory|risk");
+            output.println("END");
+            return;
+        }
+
+        String playerId = parts[0].trim(); // (not used in filtering right now, but good to keep)
+        int minStars = Integer.parseInt(parts[1].trim());
+        String betCat = parts[2].trim();
+        String risk = parts[3].trim();
+
+        String jobId = java.util.UUID.randomUUID().toString();
+        int expectedWorkers = workers.size();
+
+        // MAP: broadcast to all workers
+        for (backend.worker.Worker worker : workers) {
+            forwardMsgToWorker(worker,
+                    "MAP_SEARCH " + jobId + "|" + minStars + "|" + betCat + "|" + risk + "|" +
+                            reducerHost + "|" + reducerPort + "|" + expectedWorkers
+            );
+        }
+
+        // WAIT for reducer push on callback port
+        String key = "SEARCH|" + jobId;
+        String finalResult;
+
+
+        long deadline = System.currentTimeMillis() + 10_000; // 10 sec
+
+
+        synchronized (reduceLock) {
+            while (!pendingReduceResults.containsKey(key)) {
+                long remain = deadline - System.currentTimeMillis();
+                if (remain <= 0) break;
+                try { reduceLock.wait(remain); }
+                catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
+            }
+            finalResult = pendingReduceResults.remove(key);
+        }
+
+        if (finalResult == null) {
+            output.println("ERROR SEARCH timeout (Reducer did not push result)");
+            output.println("END");
+            return;
+        }
+
+        // send final lines to player
+        for (String ln : finalResult.split("\n")) {
+            if (!ln.isBlank()) output.println(ln);
+        }
+        output.println("END");
+    }
 }
 

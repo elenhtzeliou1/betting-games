@@ -6,6 +6,7 @@ import backend.common.RiskLevel;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -34,6 +35,10 @@ public class WorkerServer {
 
             do {
                 Socket socket = serverSocket.accept();
+
+                // every new connection to worker is handled in a separate thread
+                // Multithreaded Worker
+                // Worker can handle many requests from masterServer parallel
                 new Thread(() -> handleWorker(socket, port)).start();
             } while (true);
         }catch (Exception e){
@@ -68,12 +73,26 @@ public class WorkerServer {
                 return;
             } else if (inputString.startsWith("DELETE_EXISTING_GAME ")) {
                 handleChangeGameVisibility(inputString,output);
+                return;
             }
+            else if (inputString.startsWith("MAP_PROVIDER_PROFIT ")){
+                //handleProviderProfit(inputString, port,output);
+                return;
+            }else if(inputString.equalsIgnoreCase("FETCH_ALL_AVAILABLE_GAMES")){
+                handleShowAllAvailableGame(output);
+                return;
+            } else if (inputString.startsWith("MAP_SEARCH ")) {
+                handleMapSearch(inputString,port,output);
+                return;
+
+            }
+
             // continue with other else if
             //
             //
-            //
-            //
+
+            output.println("ERROR unknown worker command: " + inputString);
+            output.println("END");
         }catch(Exception e){
             System.out.println("Worker error appeared: " + e.getMessage());
         }
@@ -200,5 +219,129 @@ public class WorkerServer {
 
 
 
+    }
+
+    private void handleProviderProfit(String jobId, String provider, int expectedN,
+                                             String reducerHost, int reducerPort) throws Exception{
+        try (Socket s = new Socket(reducerHost, reducerPort);
+             PrintWriter out = new PrintWriter(s.getOutputStream(), true)) {
+
+            out.println("MAP_PROVIDER_PROFIT " + jobId + " " + provider + " " + expectedN);
+
+            synchronized (gamesByName) {
+                for (GameState gs : gamesByName.values()) {
+                    if (gs.getGame().getProviderName().equalsIgnoreCase(provider)) {
+                        String gameName = gs.getGame().getGameName();
+                        double profit = gs.getTotalLossProfit();
+                        out.println(gameName + "\t" + profit);
+                    }
+                }
+            }
+
+            out.println("END");
+        }
+
+    }
+
+
+    private static void handleShowAllAvailableGame(PrintWriter output){
+        synchronized (gamesByName){
+            for (Map.Entry<String, GameState> val : gamesByName.entrySet()){
+
+                if(val.getValue().isActive()){
+                    // Fetch Only Active Games
+                    GameState gameState = val.getValue();
+                    output.println("GameName: "+gameState.getGame().getGameName() +
+                            " | Provider: " + gameState.getGame().getProviderName()+
+                            " | BetCategory: "+ gameState.getGame().getBetCategory() +
+                            " | Risk: " + gameState.getGame().getRiskLevel() +
+                            " | isGameActive: "+ gameState.isActive()
+                    );
+
+                }
+
+            }
+        }
+        output.println("END");
+    }
+
+    private static void handleMapSearch(String inputString, int port, PrintWriter output){
+        String payload = inputString.substring("MAP_SEARCH ".length()).trim();
+        String[] parts = payload.split("\\|");
+        if(parts.length!=7){
+            output.println("ERROR bad format. Expected jobId|minStars|betCategory|risk|reducerHost|reducerPost|expectedN");
+            output.println("END");
+            return;
+        }
+        String jobId = parts[0].trim();
+        int minStars = Integer.parseInt(parts[1].trim());
+        String betCategory = parts[2].trim();
+        String risk = parts[3].trim();
+        String reducerHost = parts[4].trim();
+        int reducerPort = Integer.parseInt(parts[5].trim());
+        int expectedN = Integer.parseInt(parts[6].trim());
+
+        // CONNECT TO REDUCER
+        // send map output
+        try(Socket s = new Socket(reducerHost,reducerPort);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(s.getInputStream()));
+            PrintWriter writer = new PrintWriter(s.getOutputStream(),true))
+        {
+            // 1. First Line tells Reducer:
+            // - which job this belongs to && how many total Workers are expected to contribute
+            // Reducer Command format: MAP_SEARCH <jobId> <expectedN>
+            writer.println("MAP_SEARCH "+ jobId+ " "+ expectedN);
+
+            // Lock gamesByName while the itteration happens to avoid concurrent modification issues
+            // (Workers are multithreaded; another request could add/delete/update game visibility.)
+
+            synchronized (gamesByName){
+                for(GameState gameState : gamesByName.values()){
+                    // Only games that are visible to player
+                    // Skip non visible games (to player)
+                    if(!gameState.isActive()) continue;
+                    var game = gameState.getGame();
+
+                    // --- Filters:
+                    // 1) Filter: minStars (if minStars ===0 : skip this)
+                    if(minStars>0 && game.getStars()<minStars) continue;
+
+                    // 2) Filter: by bet category (if betCategory ==ANY : accept thema all)
+                    if (!"ANY".equalsIgnoreCase(betCategory) && !game.getBetCategory().equals(betCategory)) continue;
+
+                    // 3) Filter: Risk level (if risk == ANY: accept all)
+                    String gameRisk = game.getRiskLevel().name().toLowerCase();
+                    if (!"ANY".equalsIgnoreCase(risk) && !gameRisk.equalsIgnoreCase(risk)) continue;
+
+                    // If it passed all filters, emit one intermediate record
+                    // We choose key2 implicitly as gameName (Reducer can deduplicate by gameName).
+                    // Value2 is the rest of the game info needed by the UI.
+                    //
+                    // Wire format (one line per game):
+                    //   GAME|gameName|provider|stars|betCategory|risk|minBet|maxBet
+                    writer.println(
+                            "GAME|" + game.getGameName() + "|" + game.getProviderName() + "|" + game.getStars() + "|" +
+                                    game.getBetCategory() + "|" + gameRisk + "|" + game.getMinBet() + "|" + game.getMaxBet()
+                    );
+                }
+            }
+            // Signal the end-of-list fot this Worker's partial results
+            writer.println("END");
+
+
+
+            // optional use in to read reducer ack so we know the reducer accepted our submission
+            String ack = reader.readLine(); // should be "ACK"
+            System.out.println("[Worker " + port + "] Reducer replied: " + ack);
+
+            // FINAL STEP
+            // Reply back to Master that this Worker finished its MAP_SEARCH work
+            output.println("OK Worker ("+port+") MAP_SEARCH sent to REDUCER");
+            output.println("END");
+
+        }catch (Exception e){
+            output.println("ERROR: MAP_SEARCH failed: "+e.getMessage());
+            output.println("END");
+        }
     }
 }

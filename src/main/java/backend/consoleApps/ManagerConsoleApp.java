@@ -36,8 +36,9 @@ public class ManagerConsoleApp {
                 System.out.println("2. DELETE_EXISTING_GAME");
                 System.out.println("3. UPDATE_GAME_RISK");
                 System.out.println("4. SHOW_TOTAL_PROFITS_DAMAGES_PER_GAME");
-                System.out.println("5. SHOW TOTAL_PROFIT_DAMAGES_FOR_SPECIFIC_PLAYER");
-                System.out.println("6. SHOW ALL GAMES");
+                System.out.println("5. PROFIT_DAMAGES_PER_PROVIDER");
+                System.out.println("6. SHOW TOTAL_PROFIT_DAMAGES_FOR_SPECIFIC_PLAYER");
+                System.out.println("7. SHOW ALL GAMES");
                 System.out.println("0. EXIT");
 
                 choice = scanner.nextLine().trim();
@@ -123,10 +124,20 @@ public class ManagerConsoleApp {
                         break;
                     }
                     case "5": {
-                        System.out.println("Not implemented yet!");
+                        // 1. Show profit damages per provider
+                        System.out.println("Give ProviderName: ");
+                        String providerName = scanner.nextLine().trim();
+
+                        // 2. Send the request to MasterServer
+                        output.println("FIND_PROVIDER_PROFIT_LOSS "+ providerName);
+
+                        // 3. Show the received from MasterServer, result
+                        readMsgUntilEnd(input);
                         break;
+
+
                     }
-                    case "6": {
+                    case "7": {
                         System.out.println("Printing all existing games...");
                         output.println("SHOW_ALL_GAMES ");
                         readMsgUntilEnd(input);

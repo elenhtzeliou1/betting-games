@@ -15,7 +15,7 @@ public class BetRecord {
         this.playerId = playerId;
         this.gameName = gameName;
         this.providerName = providerName;
-        this.bet =bet;
+        this.bet = bet;
         this.payout = payout;
 
     }
