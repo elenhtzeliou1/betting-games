@@ -4,8 +4,11 @@ public class Game {
     private final String gameName;
     private final String providerName;
 
-    private int stars;
+    private double stars;
     private int noOfVotes;
+
+    private double starsSum; //counter for totalStars
+
     private String gameLogo;
     private final double minBet;
     private final double maxBet;
@@ -14,7 +17,8 @@ public class Game {
     private final String hashKey;
     private final String betCategory; // "$" or "$$" or "$$$"
 
-    public Game(String gameName,String providerName, int stars, int noOfVotes, String gameLogo,
+
+    public Game(String gameName,String providerName, double stars, int noOfVotes, String gameLogo,
                 double minBet,double maxBet, RiskLevel riskLevel, String hashKey){
         this.gameName = gameName;
         this.providerName = providerName;
@@ -26,6 +30,8 @@ public class Game {
         this.riskLevel = riskLevel;
         this.hashKey = hashKey;
         this.betCategory = calculateBetCategory(minBet);
+
+        this.starsSum = noOfVotes * stars;
     }
 
     // Getters and Setters
@@ -35,7 +41,7 @@ public class Game {
     public String getProviderName(){
         return this.providerName;
     }
-    public int getStars(){
+    public double getStars(){
         return this.stars;
     }
     public int getNoOfVotes(){
@@ -60,12 +66,37 @@ public class Game {
     public void setRiskLevel(RiskLevel newRiskLevel){
         this.riskLevel = newRiskLevel;
     }
+
+
+    // Helping methods for rating a game by players
     public void increaseNoOfVotes(){
         this.noOfVotes++;
     }
-    //add a method for calculating stars
-    //
-    //
+    public void increaseStarsSum(int stars){
+        this.starsSum += stars;
+    }
+    public void setStars(){
+        //avoid dividing by 0:
+        if(this.noOfVotes<=0){
+            this.noOfVotes=0;
+            this.starsSum =0;
+            this.stars =0;
+            return;
+        }
+        //else
+
+        this.stars = this.starsSum/this.noOfVotes
+        ;
+    }
+
+    public void decreaseNoOfVotes(){this.noOfVotes--;}
+    public void decreaseStarsSum(int stars) {
+        if (this.noOfVotes >0){
+            this.starsSum -= stars;
+        }
+
+    }
+
 
     private static String calculateBetCategory(double minBet){
         if (minBet >=5) return "$$$";
@@ -76,8 +107,6 @@ public class Game {
     public String getBetCategory(){
         return this.betCategory;
     }
-
-
 
 
 }

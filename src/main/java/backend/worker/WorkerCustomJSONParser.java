@@ -11,23 +11,24 @@ public class WorkerCustomJSONParser {
         JSONParser parser = new JSONParser();
         JSONObject obj = (JSONObject) parser.parse(json);
 
-        String gameName = getString(obj, "GameName");
-        String providerName = getString(obj,"ProviderName");
+        String gameName = readStringValue(obj, "GameName");
+        String providerName = readStringValue(obj,"ProviderName");
 
-        int stars = getInt(obj, "Stars");
-        int noOfVotes = getInt(obj, "NoOfVotes");
+        double stars = readDoubleValue(obj, "Stars");
+        int noOfVotes = readIntValue(obj, "NoOfVotes");
 
-        String gameLogo = getString(obj, "GameLogo");
-        double minBet = getDouble(obj,"MinBet");
-        double maxBet = getDouble(obj,"MaxBet");
+        String gameLogo =  readStringValue(obj, "GameLogo");
+        double minBet = readDoubleValue(obj,"MinBet");
+        double maxBet = readDoubleValue(obj,"MaxBet");
 
-        String riskLevelStr = getString(obj, "RiskLevel");
-        String hashKey = getString(obj, "HashKey");
+        String riskLevelStr =  readStringValue(obj, "RiskLevel");
+        String hashKey =  readStringValue(obj, "HashKey");
 
-        //basic validations
+        // basic validations
         if(gameName.isBlank()) throw new IllegalArgumentException("GameName is missing!");
         if(providerName.isBlank()) throw new IllegalArgumentException("ProviderName is missing!");
         if (hashKey.isBlank()) throw new IllegalArgumentException("HashKey is missing!");
+        if(stars < 0) throw new IllegalArgumentException("Stars must be >=0");
         if(minBet<0) throw new IllegalArgumentException("MinBet must be >0!");
         if(maxBet<0) throw new IllegalArgumentException("MaxBet must be >0!");
         if(minBet>maxBet) throw new IllegalArgumentException("MaxBet should be greater than MinBet");
@@ -37,7 +38,7 @@ public class WorkerCustomJSONParser {
         try{
             riskLevel = RiskLevel.parse(riskLevelStr);
         }catch (Exception e){
-            throw new IllegalArgumentException("Invalid Risk level. Allowed: low || medium || high");
+            throw new IllegalArgumentException("Invalid Risk level. Allowed values: low || medium || high");
         }
 
 
@@ -47,30 +48,31 @@ public class WorkerCustomJSONParser {
 
 
 
-    private static String getString(JSONObject obj, String key) {
-        Object v = obj.get(key);
-        return (v == null) ? "" : v.toString();
+    private static String readStringValue(JSONObject obj, String key) {
+        Object raw = obj.get(key);
+        if (raw == null) return  "";
+        return raw.toString();
     }
 
-    private static double getDouble(JSONObject obj, String key) {
-        Object v = obj.get(key);
-        if (v == null) return 0.0;
+    private static double readDoubleValue(JSONObject obj, String key) {
+        Object raw = obj.get(key);
+        if (raw == null) return 0.0;
 
-        if (v instanceof Number) {
-            return ((Number) v).doubleValue();
+        if (raw instanceof Number) {
+            return ((Number) raw).doubleValue();
         }
         // if it's a String with something like "37.99"
-        return Double.parseDouble(v.toString());
+        return Double.parseDouble(raw.toString());
     }
 
-    private static int getInt(JSONObject obj, String key) {
-        Object v = obj.get(key);
-        if (v == null) return 0;
+    private static int readIntValue(JSONObject obj, String key) {
+        Object raw = obj.get(key);
+        if (raw == null) return 0;
 
-        if (v instanceof Number) {
-            return ((Number) v).intValue();
+        if (raw instanceof Number) {
+            return ((Number) raw).intValue();
         }
-        return Integer.parseInt(v.toString());
+        return Integer.parseInt(raw.toString());
     }
 
 }

@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
@@ -311,6 +312,9 @@ public class MasterServer {
             //
             output.println("END");
             return;
+        }else if (inputString.startsWith("RATE ")){
+            handlePlayerRate(inputString,output);
+            return;
         }
         else if(inputString.startsWith("ADD_BALANCE ")){
 
@@ -378,7 +382,8 @@ public class MasterServer {
 
     private static void gatherProviderProfit(String providerName, String reducerHost, int reducerPost, PrintWriter output){
 
-        String jobId = java.util.UUID.randomUUID().toString();
+        // jobId tag so the Reducer can seperate this specific request from other request that run at the same time in him
+        String jobId = UUID.randomUUID().toString();
 
         // How many workers should reach the reducer
         int expectedWorkers = workers.size();
@@ -428,7 +433,7 @@ public class MasterServer {
 
         // Use unique id so we can match Reducer result to this request
         // (many players / managers are requesting different things simuteniously)
-        String jobId = java.util.UUID.randomUUID().toString();
+        String jobId = UUID.randomUUID().toString();
 
         // Reducer must know how many workers will forward him results
         int expectedNWorkers = workers.size();
@@ -500,7 +505,8 @@ public class MasterServer {
         String betCat = parts[2].trim();
         String risk = parts[3].trim();
 
-        String jobId = java.util.UUID.randomUUID().toString();
+        // assign unique id so reducer can separate different searches
+        String jobId = UUID.randomUUID().toString();
         int expectedWorkers = workers.size();
 
         // MAP: broadcast to all workers
@@ -543,6 +549,35 @@ public class MasterServer {
     }
 
 
+    // Player rate() method implementation:
+    private static void  handlePlayerRate(String inputString, PrintWriter output){
+        // Rate request from player comes like:
+        // SEARCH playerId|gameName|stars;
+        String payload = inputString.substring("RATE ".length()).trim();
+        String[] parts = payload.split("\\|");
+
+        if (parts.length !=3){
+            output.println("ERROR bad RATE format. Expected: playerId|gameName|stars");
+            output.println("END");
+        }
+        String playerId = parts[0].trim();
+        String gameName = parts[1].trim();
+        int stars = Integer.parseInt(parts[2].trim());
+
+        // Send it to its stored worker
+        Worker worker  = chooseWorker(gameName);
+
+        String workerResponse = forwardMsgToWorker(worker, "RATE "+playerId+"|"+gameName+"|"+stars);
+
+        // Send the response to Player
+        for(String ln: workerResponse.split("\n")){
+            if (!ln.isBlank()) output.println(ln);
+        }
+        output.println("END");
+        return;
+
+
+    }
 
     // ------------------------------------------------------------------------------  //
     // ------------------------------------------------------------------------------  //
@@ -601,8 +636,6 @@ public class MasterServer {
             }
 
             output.println("ERROR unknown reducer push: " + header);
-
-
 
 
         }catch (Exception ignored){}

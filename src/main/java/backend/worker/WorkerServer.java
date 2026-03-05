@@ -15,8 +15,7 @@ import java.util.Map;
 
 public class WorkerServer {
 
-    // GameName, GameState
-    // Later remove //
+    // MAP -> <GameName, GameState>
     private static final Map<String, GameState> gamesByName = new HashMap<>();
     // List<BetRecord> betHistory = new ArrayList<>();
 
@@ -78,11 +77,13 @@ public class WorkerServer {
             else if (inputString.startsWith("MAP_PROVIDER_PROFIT ")){
                 //handleProviderProfit(inputString, port,output);
                 return;
-            
+
             } else if (inputString.startsWith("MAP_SEARCH ")) {
                 handleMapSearch(inputString,port,output);
                 return;
-
+            } else if(inputString.startsWith("RATE ")){
+                handleGameRate(inputString,output);
+                return;
             }
 
             // continue with other else if
@@ -322,5 +323,59 @@ public class WorkerServer {
             output.println("ERROR: MAP_SEARCH failed: "+e.getMessage());
             output.println("END");
         }
+    }
+
+
+
+    private static void handleGameRate(String inputString, PrintWriter output){
+        String payload = inputString.substring("RATE ".length()).trim();
+        String[] parts = payload.split("\\|");
+
+        if (parts.length !=3){
+            output.println("ERROR bad RATE format. Expected: playerId|gameName|stars");
+            output.println("END");
+        }
+        String playerId = parts[0].trim();
+        String gameName = parts[1].trim().toLowerCase();
+        int stars;
+        try {
+            stars = Integer.parseInt(parts[2].trim());
+        } catch (NumberFormatException e) {
+            output.println("ERROR stars must be an integer 1-5");
+            output.println("END");
+            return;
+        }
+
+
+        GameState gameState;
+        synchronized (gamesByName){
+            gameState = gamesByName.get(gameName);
+        }
+
+        if(gameState == null){
+            // No game with this name Exists
+            output.println("Error, no Game found with GameName: "+gameName);
+            output.println("END");
+            return;
+        }
+        // allow review from player only if game is visible to player
+        if(!gameState.isActive()){
+            output.println("ERROR Game is not available for rating right now!");
+            output.println("END");
+            return;
+        }
+
+        try{
+            boolean rateSaved = gameState.addRate(playerId,stars); // syncronized inside GameState
+            if (rateSaved){
+                output.println("Your rate is saved! ");
+            }else{
+                output.println("ERROR you already rated this game (delete or update your rate)");
+            }
+        }catch(IllegalArgumentException e){
+            output.println("ERROR "+e.getMessage());
+        }
+        output.println("END");
+
     }
 }

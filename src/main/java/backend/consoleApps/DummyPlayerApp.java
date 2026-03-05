@@ -40,8 +40,9 @@ public class DummyPlayerApp {
                 System.out.println("=== DUMMY PLAYER MENU ===");
                 System.out.println("1. Show all available Games");
                 System.out.println("2. Search");
-                System.out.println("3. Rate Game");
-                System.out.println("4. Add Tokens");
+                System.out.println("3. Play");
+                System.out.println("4. Rate Game");
+                System.out.println("5. Add Tokens");
                 System.out.println("0. Exit");
 
 
@@ -66,11 +67,17 @@ public class DummyPlayerApp {
                         break;
                     }
                     case "3":{
+                        // Perform Play()
                         System.out.println("Not implemented yet");
-
                         break;
                     }
                     case "4":{
+                        // Rate game Rate()
+                        rate(scanner,output,input);
+                        break;
+                    }
+                    case "5":{
+                        // Perform AddToken() (increase player's balance by specific tokens)
                         System.out.println("Not implemented yet");
                         break;
                     }
@@ -85,6 +92,7 @@ public class DummyPlayerApp {
         }
     }
 
+    // Helping method to show all available games to Player
     private static void fetchAllAvailableGame(PrintWriter output, BufferedReader input) throws Exception {
         // send request to master
         output.println("FETCH_ALL_AVAILABLE_GAMES");
@@ -93,17 +101,12 @@ public class DummyPlayerApp {
         readMsgUntilEnd(input);
     }
 
-    // helper method for multilines responses that MasterServer sends
-    private static void readMsgUntilEnd(BufferedReader input) throws Exception{
-        String line;
-        while((line = input.readLine())!=null){
-            if(line.equals("END")) break;
-            System.out.println(line);
-        }
-    }
 
+
+
+    // Search() method implementation
     private static void search(Scanner scanner, PrintWriter output, BufferedReader input) throws Exception {
-        System.out.println("Give PlayerId (e.g. user123):");
+        System.out.println("Give PlayerId (e.g. user123): ");
         String playerId = scanner.nextLine().trim();
 
         System.out.println("Give MinStars: (0-5)");
@@ -127,6 +130,38 @@ public class DummyPlayerApp {
         readMsgUntilEnd(input);
     }
 
+    // Play() method implementation
+    //
+    //
+    //
+
+    // Rate() method implementation
+    // Let a user rate a game
+    // DON'T let him rate it again
+    // If user has already rated this game let him just update this review or delete it
+    private static void rate(Scanner scanner, PrintWriter output, BufferedReader input) throws Exception{
+        System.out.println("Give PlayerId (e.g. user123): ");
+        String playerId  = scanner.nextLine().trim();
+
+        System.out.println("Choose Game for review: ");
+        String gameName = scanner.nextLine().trim();
+
+        System.out.println("Give stars (1-5):");
+        int stars = readInt(scanner, "Stars (1-5): ",1,5);
+
+        String cmd = "RATE "+playerId+"|"+gameName+"|"+stars;
+        output.println(cmd);
+
+        System.out.println("Result: ");
+        readMsgUntilEnd(input);
+
+    }
+
+    // ---------------------------------------------------------//
+    // ---------------------------------------------------------//
+    // ---------------------------------------------------------//
+    // Reading Helping Methods
+    // helper method for multilines responses that MasterServer sends
     private static int readInt(Scanner scanner, String prompt, int min, int max) {
         while (true) {
             System.out.print(prompt);
@@ -157,4 +192,11 @@ public class DummyPlayerApp {
         }
     }
 
+    private static void readMsgUntilEnd(BufferedReader input) throws Exception{
+        String line;
+        while((line = input.readLine())!=null){
+            if(line.equals("END")) break;
+            System.out.println(line);
+        }
+    }
 }
