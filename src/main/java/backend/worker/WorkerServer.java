@@ -79,7 +79,8 @@ public class WorkerServer {
                 //handleProviderProfit(inputString, port,output);
                 return;
             }else if(inputString.equalsIgnoreCase("FETCH_ALL_AVAILABLE_GAMES")){
-                handleShowAllAvailableGame(output);
+                // handle map but all filters are = ANY or 0
+                handleMapSearch(inputString,port,output);
                 return;
             } else if (inputString.startsWith("MAP_SEARCH ")) {
                 handleMapSearch(inputString,port,output);
@@ -244,33 +245,7 @@ public class WorkerServer {
     }
 
 
-    /*
-    private static void handleShowAllAvailableGame(PrintWriter output){
-        // Connect with Reducer to push him the request
-        // Every worker send's to Reducer it's Map with available Games
 
-        try(Socket s = new Socket(reducerHost,reducerPort);
-        )
-
-        synchronized (gamesByName){
-            for (Map.Entry<String, GameState> val : gamesByName.entrySet()){
-
-                if(val.getValue().isActive()){
-                    // Fetch Only Active Games
-                    GameState gameState = val.getValue();
-                    output.println("GameName: "+gameState.getGame().getGameName() +
-                            " | Provider: " + gameState.getGame().getProviderName()+
-                            " | BetCategory: "+ gameState.getGame().getBetCategory() +
-                            " | Risk: " + gameState.getGame().getRiskLevel() +
-                            " | isGameActive: "+ gameState.isActive()
-                    );
-
-                }
-
-            }
-        }
-        output.println("END");
-    } */
 
     private static void handleMapSearch(String inputString, int port, PrintWriter output){
         String payload = inputString.substring("MAP_SEARCH ".length()).trim();
