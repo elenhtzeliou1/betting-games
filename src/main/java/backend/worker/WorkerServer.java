@@ -78,10 +78,7 @@ public class WorkerServer {
             else if (inputString.startsWith("MAP_PROVIDER_PROFIT ")){
                 //handleProviderProfit(inputString, port,output);
                 return;
-            }else if(inputString.equalsIgnoreCase("FETCH_ALL_AVAILABLE_GAMES")){
-                // handle map but all filters are = ANY or 0
-                handleMapSearch(inputString,port,output);
-                return;
+            
             } else if (inputString.startsWith("MAP_SEARCH ")) {
                 handleMapSearch(inputString,port,output);
                 return;
