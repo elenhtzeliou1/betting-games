@@ -19,15 +19,13 @@ import java.util.*;
  *
  * Synchronization: only synchronized / wait / notify (no java.util.concurrent).
  */
-
-
 public class ReducerServer {
 
     // Where reducer will push back its final results
     private static final String MASTER_HOST = "localhost";
     private static final int MASTER_CALLBACK_PORT = 5001;
 
-    // In memory jobs
+    // In-memory jobs
     private static final Object JOBS_LOCK = new Object();
     private static final Map<String, SearchJob> searchJobs = new HashMap<>();
    // private static final Map<String, ProviderProfitJob> providerJobs = new HashMap<>();
@@ -55,6 +53,9 @@ public class ReducerServer {
             // Accept connections forever.
             // Each connection is handle in its own thread (multi-threaded reducer)
             while(true){
+                // Reducer is listening and spawns threads
+                // can accept multiple worker connections at the same thime
+                // each workers
                 Socket socket = serverSocket.accept();
                 new Thread(() -> handleConnection(socket)).start();
             }
@@ -256,9 +257,9 @@ public class ReducerServer {
     }
 
     /*
-     * PUSH final SEARCH result to Master callback server (port 5001).
+     * PUSH final SEARCH result to MasterServer callback server (port 5001).
      *
-     * Protocol:
+     * used protocol:
      *   REDUCE_SEARCH_RESULT <jobId>
      *   GAME|...
      *   GAME|...

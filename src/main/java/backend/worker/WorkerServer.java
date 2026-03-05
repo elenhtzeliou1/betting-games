@@ -244,7 +244,14 @@ public class WorkerServer {
     }
 
 
+    /*
     private static void handleShowAllAvailableGame(PrintWriter output){
+        // Connect with Reducer to push him the request
+        // Every worker send's to Reducer it's Map with available Games
+
+        try(Socket s = new Socket(reducerHost,reducerPort);
+        )
+
         synchronized (gamesByName){
             for (Map.Entry<String, GameState> val : gamesByName.entrySet()){
 
@@ -263,7 +270,7 @@ public class WorkerServer {
             }
         }
         output.println("END");
-    }
+    } */
 
     private static void handleMapSearch(String inputString, int port, PrintWriter output){
         String payload = inputString.substring("MAP_SEARCH ".length()).trim();

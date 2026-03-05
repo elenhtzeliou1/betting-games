@@ -10,7 +10,14 @@ import java.util.Scanner;
 public class DummyPlayerApp {
 
     public static void main(String[] args) {
-        try(Socket socket = new Socket("localhost",5000)){
+        String masterHost =  "localhost";
+        int masterPort =5000;
+
+        // ManagerConsoleApp <masterHost> <masterPort>
+        if(args.length >=1) masterHost = args[0];
+        if(args.length >=2) masterPort =Integer.parseInt(args[1]);
+
+        try(Socket socket = new Socket(masterHost,masterPort)){
             BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             PrintWriter output = new PrintWriter(socket.getOutputStream(),true);
 
@@ -54,7 +61,7 @@ public class DummyPlayerApp {
                         break;
                     }
                     case "2":{
-                        // Perform Serach()
+                        // Perform Search()
                         search(scanner, output,  input);
                         break;
                     }
@@ -79,11 +86,14 @@ public class DummyPlayerApp {
     }
 
     private static void fetchAllAvailableGame(PrintWriter output, BufferedReader input) throws Exception {
+        // send request to master
         output.println("FETCH_ALL_AVAILABLE_GAMES");
+
+        // read his result
         readMsgUntilEnd(input);
     }
 
-    // helper method for multilines responses
+    // helper method for multilines responses that MasterServer sends
     private static void readMsgUntilEnd(BufferedReader input) throws Exception{
         String line;
         while((line = input.readLine())!=null){

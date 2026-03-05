@@ -11,7 +11,15 @@ import java.util.Scanner;
 public class ManagerConsoleApp {
 
     public static void main(String[] args) {
-        try(Socket socket = new Socket("localhost",5000)){
+
+        String masterHost =  "localhost";
+        int masterPort =5000;
+
+        // ManagerConsoleApp <masterHost> <masterPort>
+        if(args.length >=1) masterHost = args[0];
+        if(args.length >=2) masterPort =Integer.parseInt(args[1]);
+
+        try(Socket socket = new Socket(masterHost,masterPort)){
             BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             PrintWriter output = new PrintWriter(socket.getOutputStream(),true);
 

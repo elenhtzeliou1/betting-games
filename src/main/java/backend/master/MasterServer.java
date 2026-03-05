@@ -200,8 +200,8 @@ public class MasterServer {
             return;
         }
         else if(inputString.startsWith("SHOW_ALL_GAMES")){
-           //Simple Gather all the stored Games that the workers have in their memory
-            String workerResponse  = gatherAllGamesForWorkers(inputString);
+            //Simple Gather all the stored Games that the workers have in their memory
+            String workerResponse  = gatherAllGamesFromWorkers(inputString);
 
             //Send the reply to client
             for(String ln : workerResponse.split("\n")){
@@ -290,7 +290,17 @@ public class MasterServer {
 
 
     private static void handlePlayerLogic(String inputString,PrintWriter output){
-        if(inputString.startsWith("SEARCH ")){
+        if (inputString.equalsIgnoreCase("FETCH_ALL_AVAILABLE_GAMES")){
+            String workerResponseStr = fetchAllAvailableGames();
+
+            // Send reply back to player
+            for(String ln: workerResponseStr.split("\n")){
+                if(!ln.isBlank()) output.println(ln);
+            }
+            output.println("END");
+            return;
+        }
+        else if(inputString.startsWith("SEARCH ")){
 
             handlePlayerSearch(inputString,output);
             return;
@@ -309,16 +319,7 @@ public class MasterServer {
             output.println("END");
             return;
         }
-        else if (inputString.equalsIgnoreCase("FETCH_ALL_AVAILABLE_GAMES")){
-            String workerResponseStr = fetchAllAvailableGames();
 
-            //Send reply to player
-            for(String ln: workerResponseStr.split("\n")){
-                if(!ln.isBlank()) output.println(ln);
-            }
-            output.println("END");
-            return;
-        }
 
 
         output.println("ERROR unknown player command");
@@ -359,7 +360,7 @@ public class MasterServer {
         }
     }
 
-    private static String gatherAllGamesForWorkers(String inputString){
+    private static String gatherAllGamesFromWorkers(String inputString){
         StringBuilder gameNames = new StringBuilder();
 
         for (Worker worker: workers){
@@ -414,23 +415,143 @@ public class MasterServer {
     }
 
 
+    // --- Helping Methods for Player Logic --- //
+    // Fetch all available games
+    // We gonna reuse the search() method but with filters: ANY
+    // Make the request to every worker via: forwardMsgToWorker
+    // In worker gather all the available games and forward the result list to Reducer
+    // Reducer gathers all the lists from all the workers
+    // Reducer Mergers them list's to a new finall one
+    // Lastly he pushes it back to Master
+    // MasterServer send the result to Player
     private static String fetchAllAvailableGames(){
-        StringBuilder availableGame = new StringBuilder();
 
+        // Use unique id so we can match Reducer result to this request
+        // (many players / managers are requesting different things simuteniously)
+        String jobId = java.util.UUID.randomUUID().toString();
+
+        // Reducer must know how many workers will forward him results
+        int expectedNWorkers = workers.size();
+
+        // MAP: Ask all workers to send their active games to reducer
         for(Worker worker: workers){
-            String workerResponse = forwardMsgToWorker(worker, "FETCH_ALL_AVAILABLE_GAMES");
-            if (workerResponse == null || workerResponse.isBlank())continue;
+            // Re-use MAP_SEARCH with accept all filters:
+            // jobId|minStars|betCategory|risk|reducerHost|reducerPost|expectedNworkers
+            forwardMsgToWorker(worker, "MAP_SEARCH "+jobId+"|0|ANY|ANY|"+reducerHost+"|"+reducerPort+"|"+expectedNWorkers);
+        }
 
-            for(String ln : workerResponse.split("\n")){
-                ln = ln.trim();
-                if( !ln.isBlank())availableGame.append(ln).append("\n");
+        // Waiting for Reducer's Result
+        String key = "SEARCH|" +jobId;
+        String finalResult;
+
+        // Safety net: If reducer fails or network error occurs -> timeout (we dont block it forever)
+        long deadline = System.currentTimeMillis()+10_000; // 10 seconds timeout
+
+        // reduceLock protects the shared map (pendingReduceResults)
+        // because multiple threads access it
+        // - client threads waiting here
+        // - reducer callback threads writing results in handleReducerPush()
+        synchronized (reduceLock) {
+
+            // while the reducer hasnt delivered the result for this jobId, wait
+            while (!pendingReduceResults.containsKey(key)) {
+
+                // compute remaining time till timeout
+                long remain = deadline - System.currentTimeMillis();
+
+                // If timeout is reached, stop waiting
+                if (remain <= 0) break;
+
+                try {
+                    // Wait releases the lock temporarily and sleeps until:
+                    // - notified by reducer's callback thread (notifyAll)
+                    // - or timeout expires
+                    reduceLock.wait(remain);
+                } catch (InterruptedException e) {
+                    // If the thread is interrupted, show intterupt flag and stop waiting
+                    Thread.currentThread().interrupt();
+                    break;
+                }
             }
 
+            // Take the result and remove it from the map so it doesn't accumulate in memory
+            finalResult = pendingReduceResults.remove(key);
         }
-        return availableGame.length() ==0 ? "NO AVAILABLE GAMES YET!\n": availableGame.toString();
+        // If nothing arrived (timeout/error), return empty message
+        if (finalResult == null || finalResult.isBlank()) {
+            return "There are no available games yet!\n";
+        }
+        return finalResult;
+
+    }
+
+    // Player search() method implementation:
+    private static void handlePlayerSearch(String inputString, PrintWriter output){
+        String payload = inputString.substring("SEARCH ".length()).trim();
+        String[] parts = payload.split("\\|");
+        if (parts.length != 4) {
+            output.println("ERROR bad SEARCH format. Expected: playerId|minStars|betCategory|risk");
+            output.println("END");
+            return;
+        }
+
+        String playerId = parts[0].trim(); // (not used in filtering right now, but good to keep)
+        int minStars = Integer.parseInt(parts[1].trim());
+        String betCat = parts[2].trim();
+        String risk = parts[3].trim();
+
+        String jobId = java.util.UUID.randomUUID().toString();
+        int expectedWorkers = workers.size();
+
+        // MAP: broadcast to all workers
+        for (Worker worker : workers) {
+            forwardMsgToWorker(worker,
+                    "MAP_SEARCH " + jobId + "|" + minStars + "|" + betCat + "|" + risk + "|" +
+                            reducerHost + "|" + reducerPort + "|" + expectedWorkers
+            );
+        }
+
+        // WAIT for reducer push on callback port
+        String key = "SEARCH|" + jobId;
+        String finalResult;
+
+
+        long deadline = System.currentTimeMillis() + 10_000; // 10 sec
+
+
+        synchronized (reduceLock) {
+            while (!pendingReduceResults.containsKey(key)) {
+                long remain = deadline - System.currentTimeMillis();
+                if (remain <= 0) break;
+                try { reduceLock.wait(remain); }
+                catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
+            }
+            finalResult = pendingReduceResults.remove(key);
+        }
+
+        if (finalResult == null) {
+            output.println("ERROR SEARCH timeout (Reducer did not push result)");
+            output.println("END");
+            return;
+        }
+
+        // send final lines to player
+        for (String ln : finalResult.split("\n")) {
+            if (!ln.isBlank()) output.println(ln);
+        }
+        output.println("END");
     }
 
 
+
+    // ------------------------------------------------------------------------------  //
+    // ------------------------------------------------------------------------------  //
+    // ------------------------------------------------------------------------------  //
+    // ------------------------------------------------------------------------------  //
+    // ------------------------------------------------------------------------------  //
+
+    // Helping methods for connection with ReducerServer
+    // Not fully implemented yet!
     private static void startReducerCallbackServer(int port){
         try(ServerSocket serverSocket = new ServerSocket(port)){
             while(true){
@@ -489,60 +610,6 @@ public class MasterServer {
     }
 
 
-    private static void handlePlayerSearch(String inputString, PrintWriter output){
-        String payload = inputString.substring("SEARCH ".length()).trim();
-        String[] parts = payload.split("\\|");
-        if (parts.length != 4) {
-            output.println("ERROR bad SEARCH format. Expected: playerId|minStars|betCategory|risk");
-            output.println("END");
-            return;
-        }
 
-        String playerId = parts[0].trim(); // (not used in filtering right now, but good to keep)
-        int minStars = Integer.parseInt(parts[1].trim());
-        String betCat = parts[2].trim();
-        String risk = parts[3].trim();
-
-        String jobId = java.util.UUID.randomUUID().toString();
-        int expectedWorkers = workers.size();
-
-        // MAP: broadcast to all workers
-        for (backend.worker.Worker worker : workers) {
-            forwardMsgToWorker(worker,
-                    "MAP_SEARCH " + jobId + "|" + minStars + "|" + betCat + "|" + risk + "|" +
-                            reducerHost + "|" + reducerPort + "|" + expectedWorkers
-            );
-        }
-
-        // WAIT for reducer push on callback port
-        String key = "SEARCH|" + jobId;
-        String finalResult;
-
-
-        long deadline = System.currentTimeMillis() + 10_000; // 10 sec
-
-
-        synchronized (reduceLock) {
-            while (!pendingReduceResults.containsKey(key)) {
-                long remain = deadline - System.currentTimeMillis();
-                if (remain <= 0) break;
-                try { reduceLock.wait(remain); }
-                catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
-            }
-            finalResult = pendingReduceResults.remove(key);
-        }
-
-        if (finalResult == null) {
-            output.println("ERROR SEARCH timeout (Reducer did not push result)");
-            output.println("END");
-            return;
-        }
-
-        // send final lines to player
-        for (String ln : finalResult.split("\n")) {
-            if (!ln.isBlank()) output.println(ln);
-        }
-        output.println("END");
-    }
 }
 
