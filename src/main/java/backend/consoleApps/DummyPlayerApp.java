@@ -168,7 +168,7 @@ public class DummyPlayerApp {
         String cmd = "PLAY " +playerId +"|"+ gameName + "|" +bet;
         output.println(cmd);
 
-        // Receive the answer
+        // Receive the answer from MasterServer
         // Print it
         readMsgUntilEnd(input);
 

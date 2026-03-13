@@ -1,12 +1,13 @@
 package backend.worker;
 
+import backend.common.BetRecord;
 import backend.common.Game;
 import backend.common.GameState;
 import backend.common.RiskLevel;
+import backend.secureRandomGenerator.HashHelper;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.math.BigDecimal;
 import java.net.ServerSocket;
@@ -134,7 +135,7 @@ public class WorkerServer {
             return;
         }
 
-        // 3. Second Sychronized Block
+        // 3. Second Synchronized Block
         // Check if containsKey(...) because in the mean time maybe another thread added this game
         int total; // Just for our debug
         synchronized (gamesByName){
@@ -247,8 +248,6 @@ public class WorkerServer {
         boolean newIsActive = gameState.flipCurrentActiveState();
         output.println("Visibility Changed for: "+gameName+" to: " + newIsActive);
         output.println("END");
-
-
 
     }
 
@@ -442,18 +441,26 @@ public class WorkerServer {
             output.println("END");
             return;
         }
+        BigDecimal minBet;
+        BigDecimal maxBet;
+        String gameSecret;
+        String riskLevel;
 
-        // allow play only if game is visible to player
-        if(!gameState.isActive()){
-            output.println("Error, This game is not available for playing!");
-            output.println("END");
-            return;
+        // Get a consistent snapshot of gameData
+        synchronized (gameState){
+            // allow play only if game is visible to player
+            if(!gameState.isActive()){
+                output.println("Error, This game is not available for playing!");
+                output.println("END");
+                return;
+            }
+            minBet = gameState.getGame().getMinBet();
+            maxBet = gameState.getGame().getMaxBet();
+            gameSecret = gameState.getGame().getHashKey();
+            riskLevel = gameState.getGame().getRiskLevel().name().toLowerCase();
         }
-        // Check if requestBet value is valid
-        // Requested bet should be greater or equal to min bet AND smaller or equal to Max Bet
-        BigDecimal minBet = gameState.getGame().getMinBet();
-        BigDecimal maxBet = gameState.getGame().getMaxBet();
 
+        // Check if the bet that User Requested is Valid
         if (requestedBet.compareTo(minBet)<0 || requestedBet.compareTo(maxBet)>0){
             output.println("Error, Invalid Bet!");
             output.println("Bet should be: "+minBet+" <= bet <= "+ maxBet);
@@ -470,6 +477,48 @@ public class WorkerServer {
         // 4. Compute player's payout
         // 5. Add Bet Record
 
+        try{
+            // 1. Call the RandomNumberGenerator AND get the number
+            SRNGReply srngReply = getNumber(gameName);
+
+            // 2. Verify the hash locally
+            String replyNumberStr = Integer.toString(srngReply.getNumber());
+            String localHash = HashHelper.sha256(replyNumberStr+ gameSecret);
+
+            if(!localHash.equals(srngReply.getHash())){
+                output.println("Error, Hash varification faileed!");
+                output.println("END");
+                return;
+            }
+
+            // 3. Calculate payout
+            BigDecimal payout = PayoutCalculator.calculatePayout(riskLevel,requestedBet,srngReply.getNumber() );
+
+            // House profit/loss from this bet (Check again)
+            BigDecimal houseDelta = requestedBet.subtract(payout);
+
+            // 4. Update GameState (add the new betRecord to game bet record history)
+            synchronized (gameState){
+                gameState.addProfitLoss(houseDelta);
+
+                BetRecord betRecord = new BetRecord(playerId,gameName,requestedBet,payout, srngReply.getNumber());
+                gameState.addBetRecord( betRecord);
+            }
+
+            // 5. Send Result to MasterServer
+            output.println("PLAY_RESULT| player= "+ playerId
+                    +"|game="+gameName
+                    + "|random=" + srngReply.getNumber()
+                    + "|payout=" + payout
+                    + "|houseDelta=" + houseDelta
+            );
+            output.println("END");
+
+        }catch (Exception e){
+            output.println("ERROR PLAY request failed: "+e.getMessage());
+            output.println("END");
+        }
+
 
         output.println("OK Play Request for GameName: "+gameName+ "completed!");
         output.println("END");
@@ -485,12 +534,52 @@ public class WorkerServer {
             PrintWriter output = new PrintWriter(socket.getOutputStream(),true)
         ){
             output.println("REGISTER "+gameName+"|"+secret+"|"+bufferSize);
-            output.println("END");
 
             String SRNGResponse = input.readLine();
             if(SRNGResponse == null || !SRNGResponse.equals("COMPLETE")){
                 throw new RuntimeException("SNRG Game registration failse: "+ SRNGResponse);
             }
         }
+    }
+
+
+    // Get Random Number from SecureRandomNumberGenerator
+    // Send the request receive the number
+    // This Method:
+    //  - Opens a socket to SRNG
+    //  - Sends to it GET gameName
+    //  - Reads the response
+    //  - Parses the response from SRNG
+    private static SRNGReply getNumber(String gameName) throws Exception{
+
+        try( Socket socket = new Socket(SRNG_HOST, SRNG_PORT);
+             BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+             PrintWriter output = new PrintWriter(socket.getOutputStream(), true)
+        ){
+            // Send the request to SRNG
+            output.println("GET "+ gameName);
+
+            // Read the SRNG Reply
+            String reply = input.readLine();
+            if(reply == null){
+                throw new RuntimeException("SRNG return null response! Check for errors!");
+            }
+            if(reply.startsWith("Error") || reply.startsWith("ERROR")){
+                throw new RuntimeException(reply);
+            }
+
+            String[] parts =reply.split("\\|");
+            if(parts.length !=3 || !parts[0].equalsIgnoreCase("NUMBER")){
+                throw new RuntimeException(reply);
+            }
+            int number = Integer.parseInt(parts[1].trim());
+            String hash = parts[2].trim();
+
+            SRNGReply srngReply = new SRNGReply(number, hash);
+
+            return srngReply;
+
+        }
+
     }
 }

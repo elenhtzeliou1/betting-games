@@ -18,7 +18,7 @@ public class RNGContext {
         return this.secret;
     }
 
-    public int getNUmber() throws InterruptedException{
+    public int getNumber() throws InterruptedException{
         return buffer.getNumber();
     }
     public void stop(){

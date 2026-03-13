@@ -1,17 +1,21 @@
 package backend.common;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class GameState {
     private final Game game;
     private boolean isActive = true; // true by default
 
+    // Bet History for this Game
+    private List<BetRecord> betHistory =  new ArrayList<>();
+
     // One review per player for THIS game
     // Map<String = userId, Rate> ratesByPlayerId
     private final Map<String,Rate> ratesByPlayerId = new HashMap<>();
-
 
     // total loss or profit for this exact game
     // implemented later
@@ -21,7 +25,6 @@ public class GameState {
         if (game == null) throw new IllegalArgumentException("game == null");
         this.game= game;
         this.isActive = isActive;
-
     }
 
     //getters and setters
@@ -81,8 +84,23 @@ public class GameState {
         this.totalLossProfit = this.totalLossProfit.add(delta);
     }
 
+
+    public synchronized void addBetRecord(BetRecord record){
+        betHistory.add(record);
+    }
+
+    public synchronized List<BetRecord> getBetHistorySnapshot(){
+        return new ArrayList<>(betHistory);
+    }
+
+
     // Helping methods
     private void areStarsValueValid(int stars){
         if (stars < 1 || stars > 5) throw new IllegalArgumentException("Stars must be integer: 1<= Stars <=5");
     }
+
+
+
+
+
 }

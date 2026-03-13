@@ -115,7 +115,7 @@ public class SecureRandomNumberGeneratorServer {
             }
 
             synchronized (games) {
-                if (games.contains(gameName)) {
+                if (games.containsKey(gameName)) {
                     output.println("Error, This game with GameName: " + gameName + " already exists!");
                     return;
                 }
@@ -139,7 +139,7 @@ public class SecureRandomNumberGeneratorServer {
 
                 // Game name validation
                 if(gameName.isBlank()){
-                    output.println("Error, Game name is empty!");
+                    output.println("Error|Game name is empty!");
                     return;
                 }
                 RNGContext gameContext;
@@ -152,13 +152,13 @@ public class SecureRandomNumberGeneratorServer {
                     return;
                 }
 
-                int number = gameContext.getNUmber();
+                int number = gameContext.getNumber();
                 String shaNumStr = Integer.toString(number);
                 String hash = HashHelper.sha256(shaNumStr+gameContext.getSecret());
 
                 // Worker is going to verify this hash locally to himself
                 // Send reply to worker
-                output.println("NUMBER "+ number+"|"+ hash);
+                output.println("NUMBER|"+ number+"|"+ hash);
 
             }catch (InterruptedException e){
                 Thread.currentThread().interrupt();

@@ -1,23 +1,23 @@
 package backend.common;
 
+import java.math.BigDecimal;
+
 public class BetRecord {
 
     private final String playerId;
     private final String gameName;
-    private final String providerName;
-    private final double bet;
-    private final double payout;
-  //  private final double playerDelta; //calculate it here
+    private final BigDecimal bet;
+    private final BigDecimal payout;
+    private final int randomNumber;
 
-    //constructur
-    public BetRecord(String playerId, String gameName, String providerName, double bet
-                     , double payout){
+
+    public BetRecord(String playerId, String gameName, BigDecimal bet
+                     , BigDecimal payout, int randomNumber){
         this.playerId = playerId;
         this.gameName = gameName;
-        this.providerName = providerName;
         this.bet = bet;
         this.payout = payout;
-
+        this.randomNumber = randomNumber;
     }
 
     //getters
@@ -27,17 +27,14 @@ public class BetRecord {
     public String getGameName(){
         return this.gameName;
     }
-    public String getProviderName(){
-        return this.providerName;
-    }
-    public double getBet(){
+    public BigDecimal getBet(){
         return this.bet;
     }
-    public double getPayout(){
+    public BigDecimal getPayout(){
         return this.payout;
     }
-    public double getPlayerDelta(){
-        return this.payout - this.bet;
+    public int getRandomNumber(){
+        return this.randomNumber;
     }
     //maybe add getSystemDelta
 
