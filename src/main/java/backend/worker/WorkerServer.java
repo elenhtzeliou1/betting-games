@@ -81,7 +81,7 @@ public class WorkerServer {
                 return;
             }
             else if (inputString.startsWith("MAP_PROVIDER_PROFIT ")){
-                //handleProviderProfit(inputString, port,output);
+                handleProviderProfit(inputString, port,output);
                 return;
             } else if (inputString.startsWith("MAP_SEARCH ")) {
                 handleMapSearch(inputString,port,output);
@@ -148,6 +148,8 @@ public class WorkerServer {
             total = gamesByName.size();
         }
 
+
+        output.println("STORED"); // Message for MasterServerOnly
 
         String reply = "Worker (" + port + ") successfully stored: "
                 + game.getGameName()
@@ -251,24 +253,51 @@ public class WorkerServer {
 
     }
 
-    private void handleProviderProfit(String jobId, String provider, int expectedN,
-                                             String reducerHost, int reducerPort) throws Exception{
-        try (Socket s = new Socket(reducerHost, reducerPort);
-             PrintWriter out = new PrintWriter(s.getOutputStream(), true)) {
+    private static void handleProviderProfit(String inputString, int port, PrintWriter output) throws Exception{
 
-            out.println("MAP_PROVIDER_PROFIT " + jobId + " " + provider + " " + expectedN);
+        //+jobId +"|" + providerName +"|" +reducerHost +"|"+reducerPost+"|"+ expectedWorkers
+        String payload = inputString.substring("MAP_PROVIDER_PROFIT ".length()).trim();
+        String[] parts = payload.split("\\|");
+
+        if(parts.length!=5){
+            output.println("ERROR bad format. Expected jobId|minStars|betCategory|risk|reducerHost|reducerPost|expectedN");
+            output.println("END");
+            return;
+        }
+        String jobId = parts[0].trim();
+        String providerName = parts[1].trim();
+        String reducerHost = parts[2].trim();
+        int reducerPort = Integer.parseInt(parts[3].trim());
+        int expectedN = Integer.parseInt(parts[4].trim());
+
+        // Connect to reducer
+        try (Socket s = new Socket(reducerHost, reducerPort);
+             BufferedReader reader = new BufferedReader(new InputStreamReader(s.getInputStream()));
+             PrintWriter writer = new PrintWriter(s.getOutputStream(), true)) {
+
+            writer.println("MAP_PROVIDER_PROFIT " + jobId + " " + providerName + " " + expectedN);
 
             synchronized (gamesByName) {
-                for (GameState gs : gamesByName.values()) {
-                    if (gs.getGame().getProviderName().equalsIgnoreCase(provider)) {
-                        String gameName = gs.getGame().getGameName();
-                        BigDecimal profit = gs.getTotalLossProfit();
-                        out.println(gameName + "\t" + profit);
+                for (GameState gamestate : gamesByName.values()) {
+                    if (gamestate.getGame().getProviderName().equalsIgnoreCase(providerName)) {
+                        String gameName =gamestate.getGame().getGameName();
+                        BigDecimal profitLoss = gamestate.getTotalLossProfit();
+                        writer.println(gameName + "|" + profitLoss);
                     }
                 }
             }
 
-            out.println("END");
+            writer.println("END");
+
+            String ack = reader.readLine();
+            System.out.println("[Worker "+port+"] Reducer replied: "+ack);
+
+            output.println("OK Worker ("+port+") MAP_PROVIDER_PROFIT sent to REDUCER");
+            output.println("END");
+
+        }catch (Exception e){
+            output.println("ERROR: MAP_PROVIDER_PROFIT failed: "+e.getMessage());
+            output.println("END");
         }
 
     }
@@ -340,7 +369,7 @@ public class WorkerServer {
 
 
 
-            // optional use in to read reducer ack so we know the reducer accepted our submission
+            // use in to read reducer ack so we know the reducer accepted our submission
             String ack = reader.readLine(); // should be "ACK"
             System.out.println("[Worker " + port + "] Reducer replied: " + ack);
 
@@ -486,7 +515,7 @@ public class WorkerServer {
             String localHash = HashHelper.sha256(replyNumberStr+ gameSecret);
 
             if(!localHash.equals(srngReply.getHash())){
-                output.println("Error, Hash varification faileed!");
+                output.println("Error, Hash varification failed!");
                 output.println("END");
                 return;
             }

@@ -1,5 +1,6 @@
 package backend.master;
 
+import backend.common.GameProvider;
 import backend.common.RiskLevel;
 import backend.worker.Worker;
 
@@ -9,11 +10,8 @@ import java.io.PrintWriter;
 import java.math.BigDecimal;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.security.Provider;
+import java.util.*;
 
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
@@ -28,7 +26,10 @@ public class MasterServer {
     // Map<String,PlayerState> playersById (balance)
     // Reducer reducer;
     //
-    //
+
+    // Set of providers that have Games stored in workers (Set avoids duplicates)
+    // Update the list of providers after successfull storing a game to Worker (Check if already exists)
+    private static final Set<GameProvider> providers = new HashSet<>();
 
     //-------------------- Reducer Info----------------//
     private static String reducerHost = "localhost";
@@ -70,7 +71,7 @@ public class MasterServer {
             System.out.println("[MasterServer] Listening on port: "+ masterPort);
 
             while(true){
-                //connect with multiple clients (Managers & Players)
+                // Connect with multiple clients (Managers & Players)
                 // MultiThreaded MasterServer
                 Socket socket = serverSocket.accept();
                 System.out.println("[MasterServer] accepted client connection from: "
@@ -153,139 +154,31 @@ public class MasterServer {
     private static void handleManagerLogic(String inputString, PrintWriter output){
 
         if(inputString.startsWith("ADD_NEW_GAME ")){
-
-            String b64 = inputString.substring("ADD_NEW_GAME ".length()).trim();
-
-            //decode JSON to extract gameName only for routing
-            String json = new String(java.util.Base64.getDecoder().decode(b64), java.nio.charset.StandardCharsets.UTF_8);
-
-            String gameName;
-            try{
-                JSONParser parser = new JSONParser();
-                JSONObject obj = (JSONObject) parser.parse(json);
-                gameName = (String) obj.get("GameName");
-            }catch (Exception e){
-                output.println("[MasterServer] Error: Invalid JSON: "+e.getMessage());
-                output.println("END");
-                return;
-            }
-
-            //Debug
-            if (gameName == null || gameName.isBlank()){
-                output.println("[MasterServer] Error: GameName not found in given JSON! ");
-                output.println("END");
-                return;
-            }
-            System.out.println("[MasterServer] Given GameName: " + gameName);
-
-            //Choose worker
-            Worker worker = chooseWorker(gameName);
-
-            //Debug: Print the chosen worker
-            System.out.println("[MasterServer] Chosen worker: "+ worker.getPort());
-
-            //Debug: Print the JSON
-            System.out.println("[MasterServer] Full Given JSON: "+json);
-
-            //Forward the request to the choosen worker:
-            String workerResponse = forwardMsgToWorker(worker, "ADD_NEW_GAME "+ b64);
-
-            //show to which worker the request was routed
-            output.println("Master server routed Manager Request to worker: "+ worker.getPort());
-
-            //Give all the worker response
-            for(String ln : workerResponse.split("\n")){
-                if(!ln.isBlank()) output.println(ln);
-            }
-
-            output.println("END");
+            handleAddNewGameRequest(inputString,output);
             return;
         }
         else if(inputString.startsWith("SHOW_ALL_GAMES")){
-            //Simple Gather all the stored Games that the workers have in their memory
-            String workerResponse  = gatherAllGamesFromWorkers(inputString);
-
-            //Send the reply to client
-            for(String ln : workerResponse.split("\n")){
-                if(!ln.isBlank()) output.println(ln);
-            }
-            output.println("END");
+            // Simple Gather all the stored Games that the workers have in their memory
+            // Use Reducer (To avoid duplicates if we implement active replication)
+            handleShowAllGamesRequest(inputString, output);
             return;
         } else if (inputString.startsWith("UPDATE_GAME_RISK ")) {
-            String payload = inputString.substring("UPDATE_GAME_RISK ".length()).trim();
-
-            String[] parts = payload.split("\\|");
-            if(parts.length !=3){
-                output.println("Error, bad format: Expected: gameName|providerName|risk(low||medium||high)");
-                output.println("END");
-                return;
-            }
-            String gameName = parts[0].trim();
-            String providerName = parts[1].trim();
-            String riskLevelStr = parts[2].trim();
-
-            // Validation check for riskLevel input
-            // Doing the validation here provides faster reply to manager
-            // This validation can also happen only to worker
-
-            try{
-                RiskLevel.parse(riskLevelStr);
-            }catch (Exception e){
-                output.println("ERROR invalid riskString. Allowed: low || medium || high");
-                output.println("END");
-                return;
-            }
-
-            // Send it to its worker (it's owner)
-            Worker worker = chooseWorker(gameName);
-
-            // Take the worker's response
-            String workerResponse = forwardMsgToWorker(worker, "UPDATE_GAME_RISK "+ gameName+"|"+providerName+"|"+riskLevelStr);
-
-            // Send the response to Manager
-            for(String ln: workerResponse.split("\n")){
-                if (!ln.isBlank()) output.println(ln);
-            }
-            output.println("END");
+            handleUpdateRiskRequest(inputString,output);
             return;
             
         }else if(inputString.startsWith("DELETE_EXISTING_GAME ")){
-            String gameName = inputString.substring("DELETE_EXISTING_GAME ".length()).trim();
-
-            if(gameName.isBlank()){
-                output.println("ERROR gameName is required!");
-                output.println("END");
-                return;
-            }
-
-            Worker worker = chooseWorker(gameName);
-            String workerResponse = forwardMsgToWorker(worker, "DELETE_EXISTING_GAME "+gameName);
-
-            for(String ln : workerResponse.split("\n")){
-                if(!ln.isBlank()) output.println(ln);
-            }
-            output.println("END");
+            handleDeleteExistingGameRequest(inputString,output);
             return;
 
         }else if(inputString.startsWith("FIND_PROVIDER_PROFIT_LOSS ")){
-            String providerName = inputString.substring("FIND_PROVIDER_PROFIT_LOSS ".length()).trim();
-            if(providerName.isBlank()){
-                output.println("ERROR: Provider Name is Required!");
-                output.println("END");
-                return;
-            }
-
-            gatherProviderProfit(providerName, reducerHost, reducerPort, output);
+            handleFindSpecifProviderProfitLossRequest(inputString,output);
             return;
         }
+        // complete with more manager requests
+
 
         output.println("ERROR unknown manager command");
         output.println("END");
-
-        //
-        //
-        //
-        //
 
     }
 
@@ -303,20 +196,18 @@ public class MasterServer {
             return;
         }
         else if(inputString.startsWith("SEARCH ")){
-
             handlePlayerSearch(inputString,output);
             return;
         }
         else if(inputString.startsWith("PLAY ")){
             handlePlayRequest(inputString,output);
-            output.println("END");
             return;
         }else if (inputString.startsWith("RATE ")){
             handlePlayerRate(inputString,output);
             return;
         }
         else if(inputString.startsWith("ADD_BALANCE ")){
-
+            System.out.println("Not implemented yet");
             //
             //
             output.println("END");
@@ -329,6 +220,151 @@ public class MasterServer {
         output.println("END");
     }
 
+
+
+    // Handle Manager Requests (Helping Methods)
+    private static void handleAddNewGameRequest(String inputString, PrintWriter output){
+        String b64 = inputString.substring("ADD_NEW_GAME ".length()).trim();
+
+        //decode JSON to extract gameName for routing
+        String json = new String(java.util.Base64.getDecoder().decode(b64), java.nio.charset.StandardCharsets.UTF_8);
+
+        String gameName;
+        String providerName;
+        try{
+            JSONParser parser = new JSONParser();
+            JSONObject obj = (JSONObject) parser.parse(json);
+            gameName = (String) obj.get("GameName");
+            providerName = (String) obj.get("ProviderName");
+        }catch (Exception e){
+            output.println("[MasterServer] Error: Invalid JSON: "+e.getMessage());
+            output.println("END");
+            return;
+        }
+
+        // Debug
+        if (gameName == null || gameName.isBlank()){
+            output.println("[MasterServer] Error: GameName not found in given JSON! ");
+            output.println("END");
+            return;
+        }
+        if(providerName == null || providerName.isBlank()){
+            output.println("[MasterServer] Error: ProviderName not found in given JSON! ");
+            output.println("END");
+            return;
+        }
+        System.out.println("[MasterServer] Given GameName: " + gameName);
+
+        // Choose worker
+        Worker worker = chooseWorker(gameName);
+
+        //Debug: Print the chosen worker
+        System.out.println("[MasterServer] Chosen worker: "+ worker.getPort());
+
+        //Debug: Print the JSON
+        System.out.println("[MasterServer] Full Given JSON: "+json);
+
+        //Forward the request to the choosen worker:
+        String workerResponse = forwardMsgToWorker(worker, "ADD_NEW_GAME "+ b64);
+
+        //show to which worker the request was routed
+        output.println("Master server routed Manager Request to worker: "+ worker.getPort());
+
+        // Check if worker send "STORED" (it's the first line, meaning success)
+        String firstLine = workerResponse.split("\\R",2)[0];
+        firstLine = firstLine.trim();
+
+        GameProvider provider = new GameProvider(providerName);
+        if(firstLine.equalsIgnoreCase("STORED")){
+
+            // Update providers list (Set will store it if it doesnt exists)
+            synchronized (providers){
+                providers.add(provider);
+            }
+        }
+        //Give all the worker response
+        for(String ln : workerResponse.split("\n")){
+            if(!ln.isBlank()) output.println(ln);
+        }
+
+        output.println("END");
+    }
+
+    private static void handleUpdateRiskRequest(String inputString, PrintWriter output){
+        String payload = inputString.substring("UPDATE_GAME_RISK ".length()).trim();
+
+        String[] parts = payload.split("\\|");
+        if(parts.length !=3){
+            output.println("Error, bad format: Expected: gameName|providerName|risk(low||medium||high)");
+            output.println("END");
+            return;
+        }
+        String gameName = parts[0].trim();
+        String providerName = parts[1].trim();
+        String riskLevelStr = parts[2].trim();
+
+        // Validation check for riskLevel input
+        // Doing the validation here provides faster reply to manager
+        // This validation can also happen only to worker
+
+        try{
+            RiskLevel.parse(riskLevelStr);
+        }catch (Exception e){
+            output.println("ERROR invalid riskString. Allowed: low || medium || high");
+            output.println("END");
+            return;
+        }
+
+        // Send it to its worker (it's owner)
+        Worker worker = chooseWorker(gameName);
+
+        // Take the worker's response
+        String workerResponse = forwardMsgToWorker(worker, "UPDATE_GAME_RISK "+ gameName+"|"+providerName+"|"+riskLevelStr);
+
+        // Send the response to Manager
+        for(String ln: workerResponse.split("\n")){
+            if (!ln.isBlank()) output.println(ln);
+        }
+        output.println("END");
+    }
+
+    private static void handleDeleteExistingGameRequest(String inputString, PrintWriter output){
+        String gameName = inputString.substring("DELETE_EXISTING_GAME ".length()).trim();
+
+        if(gameName.isBlank()){
+            output.println("ERROR gameName is required!");
+            output.println("END");
+            return;
+        }
+
+        Worker worker = chooseWorker(gameName);
+        String workerResponse = forwardMsgToWorker(worker, "DELETE_EXISTING_GAME "+gameName);
+
+        for(String ln : workerResponse.split("\n")){
+            if(!ln.isBlank()) output.println(ln);
+        }
+        output.println("END");
+    }
+
+    private static void handleFindSpecifProviderProfitLossRequest(String inputString, PrintWriter output){
+        String providerName = inputString.substring("FIND_PROVIDER_PROFIT_LOSS ".length()).trim();
+        if(providerName.isBlank()){
+            output.println("ERROR: Provider Name is Required!");
+            output.println("END");
+            return;
+        }
+        gatherProviderProfit(providerName, reducerHost, reducerPort, output);
+    }
+
+    private static void handleShowAllGamesRequest(String inputString, PrintWriter output){
+        String workerResponse  = gatherAllGamesFromWorkers(inputString);
+
+        // Send the reply to client
+        for(String ln : workerResponse.split("\n")){
+            if(!ln.isBlank()) output.println(ln);
+        }
+        output.println("END");
+    }
 
     // Method that forwards a single request from the Master to a specific (chosen) Worker over TCP and returns worker's reply
     // - Opens a new TCP connection to the chosen worker (Host and Port) to execute the message
@@ -364,6 +400,9 @@ public class MasterServer {
     }
 
     private static String gatherAllGamesFromWorkers(String inputString){
+
+        // USE REDUCER FOR THIS GATHERING
+
         StringBuilder gameNames = new StringBuilder();
 
         for (Worker worker: workers){
@@ -381,7 +420,7 @@ public class MasterServer {
 
     private static void gatherProviderProfit(String providerName, String reducerHost, int reducerPost, PrintWriter output){
 
-        // jobId tag so the Reducer can seperate this specific request from other request that run at the same time in him
+        // jobId tag so the Reducer can separate this specific request from other request that run at the same time in him
         String jobId = UUID.randomUUID().toString();
 
         // How many workers should reach the reducer
@@ -414,8 +453,6 @@ public class MasterServer {
         }
         output.println(finalJson); //JSON includes per-game + Total
         output.println("END");
-
-
     }
 
 
@@ -547,7 +584,7 @@ public class MasterServer {
         output.println("END");
     }
 
-    // Player's handle play() method implemetation
+    // Player's handle play() method implementation
     private static void handlePlayRequest(String inputString, PrintWriter output){
         String payload = inputString.substring("PLAY ".length()).trim();
         String[] parts = payload.split("\\|");
@@ -580,7 +617,6 @@ public class MasterServer {
         output.println("END");
         return;
     }
-
 
 
     // Player rate() method implementation:

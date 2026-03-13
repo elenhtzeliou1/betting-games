@@ -126,6 +126,10 @@ public class DummyPlayerApp {
         String cmd = "SEARCH " + playerId + "|" + minStars + "|" + betCategory + "|" + risk;
         output.println(cmd);
 
+        System.out.println("\n--- SEARCH RESULTS ---");
+        readMsgUntilEnd(input);
+
+
         System.out.println();
         System.out.println("Do you want to play?");
         System.out.println("1. Yes");
@@ -149,20 +153,23 @@ public class DummyPlayerApp {
 
         }
 
-
-        System.out.println("\n--- SEARCH RESULTS ---");
-        readMsgUntilEnd(input);
     }
 
     private static void play(String playerId, Scanner scanner,BufferedReader input ,PrintWriter output) throws Exception{
         System.out.println("Select Game: ");
         String gameName = scanner.nextLine().trim();
-        //
-        // Add validations
-        //
-        //
+
+        if(gameName.isBlank()){
+            System.out.println("GameName is blank!");
+            return;
+        }
         System.out.println("Give Bet: ");
         String bet = scanner.nextLine().trim();
+
+        if(bet.isBlank()){
+            System.out.println("Bet is blank!");
+            return;
+        }
 
         // Make the play request and send it to MasterServer
         String cmd = "PLAY " +playerId +"|"+ gameName + "|" +bet;
@@ -170,6 +177,7 @@ public class DummyPlayerApp {
 
         // Receive the answer from MasterServer
         // Print it
+        System.out.println("\n--- PLAY RESULT --- ");
         readMsgUntilEnd(input);
 
     }

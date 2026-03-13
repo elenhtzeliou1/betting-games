@@ -1,6 +1,5 @@
 package backend.reducer;
 
-import javax.print.attribute.standard.JobState;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -28,7 +27,7 @@ public class ReducerServer {
     // In-memory jobs
     private static final Object JOBS_LOCK = new Object();
     private static final Map<String, SearchJob> searchJobs = new HashMap<>();
-   // private static final Map<String, ProviderProfitJob> providerJobs = new HashMap<>();
+    private static final Map<String, ProviderProfitJob> providerJobs = new HashMap<>();
 
     // -----------------------------
     // Server starting
@@ -54,7 +53,7 @@ public class ReducerServer {
             // Each connection is handle in its own thread (multi-threaded reducer)
             while(true){
                 // Reducer is listening and spawns threads
-                // can accept multiple worker connections at the same thime
+                // can accept multiple worker connections at the same time
                 // each workers
                 Socket socket = serverSocket.accept();
                 new Thread(() -> handleConnection(socket)).start();
@@ -139,7 +138,7 @@ public class ReducerServer {
         synchronized (JOBS_LOCK){
             job = searchJobs.get(jobId);
             if(job==null){
-                job = new SearchJob(jobId,expectedN);
+                job = new SearchJob(jobId,expectedN, MASTER_HOST, MASTER_CALLBACK_PORT);
                 searchJobs.put(jobId,job);
 
                 // Notify any waiting GET_SEARCH threads that the job now exists.
@@ -153,131 +152,7 @@ public class ReducerServer {
 
         // Tell worker we got it
         out.println("ACK");
-        out.println("END");
     }
-
-    /*
-     * Job state for one SEARCH MapReduce job.
-     * Reduce logic:
-     *  - Deduplicate games by gameName (key2 = normalized gameName)
-     *  - Count worker submissions (received++)
-     *  - When received == expectedN => push final merged list to Master callback port
-     */
-    private static class SearchJob{
-        private final String jobId;
-        private final int expectedN;
-        private int received = 0;
-
-        // key2 = normalized gameName, value2 = full GAME|.. line
-        private final LinkedHashMap<String, String> uniqueByGame = new LinkedHashMap<>();
-
-        // to ensure we push only once
-        private boolean pushed = false;
-
-        SearchJob(String jobId,int expectedN){
-            this.jobId = jobId;
-            this.expectedN = expectedN;
-        }
-
-        /*
-         * Reduce merge:
-         * - Deduplicate by gameName
-         * - Count worker submissions
-         * - When complete -> push to Master callback port
-         */
-        synchronized void addPartial(List<String> partialLines) {
-            for (String ln : partialLines) {
-                if (!ln.startsWith("GAME|")) continue;
-                String[] p = ln.split("\\|");
-                if (p.length < 2) continue;
-
-                String gameKey = p[1].trim().toLowerCase();
-                uniqueByGame.putIfAbsent(gameKey, ln);
-            }
-
-            received++;
-
-            // If all workers have submitted => finalize and push exactly once
-            if (received >= expectedN && !pushed) {
-                pushed = true;
-
-                // Snapshot (copy) final result while synchronized
-                List<String> finalList = buildFinalListLocked();
-
-                // Push in a new thread so reducer handler threads remain responsive
-                new Thread(() -> pushFinalSearchToMaster(jobId, finalList)).start();
-            }
-
-            notifyAll();
-        }
-
-        // Build sorted snapshot of final merged list
-        private List<String> buildFinalListLocked() {
-            List<String> list = new ArrayList<>(uniqueByGame.values());
-
-            // Optional sorting: stars DESC, then name ASC
-            list.sort((a, b) -> {
-                int sa = safeStars(a);
-                int sb = safeStars(b);
-                if (sa != sb) return Integer.compare(sb, sa);
-                return safeName(a).compareToIgnoreCase(safeName(b));
-            });
-
-            return list;
-        }
-
-        // Extract "gameName" key from "GAME|gameName|..."
-        private String extractGameKey(String line) {
-            if (line == null) return null;
-            if (!line.startsWith("GAME|")) return null;
-            String[] p = line.split("\\|");
-            if (p.length < 2) return null;
-            return p[1].trim().toLowerCase();
-        }
-
-        // Parse stars from "GAME|name|provider|stars|..."
-        private int safeStars(String line) {
-            try {
-                String[] p = line.split("\\|");
-                return Integer.parseInt(p[3].trim());
-            } catch (Exception e) {
-                return 0;
-            }
-        }
-
-        // Parse name from "GAME|name|..."
-        private String safeName(String line) {
-            try {
-                String[] p = line.split("\\|");
-                return p[1].trim();
-            } catch (Exception e) {
-                return "";
-            }
-        }
-    }
-
-    /*
-     * PUSH final SEARCH result to MasterServer callback server (port 5001).
-     *
-     * used protocol:
-     *   REDUCE_SEARCH_RESULT <jobId>
-     *   GAME|...
-     *   GAME|...
-     *   END
-     */
-    private static void pushFinalSearchToMaster(String jobId, List<String> lines) {
-        try (Socket s = new Socket(MASTER_HOST, MASTER_CALLBACK_PORT);
-             PrintWriter out = new PrintWriter(new OutputStreamWriter(s.getOutputStream(), StandardCharsets.UTF_8), true)) {
-
-            out.println("REDUCE_SEARCH_RESULT " + jobId);
-            for (String ln : lines) out.println(ln);
-            out.println("END");
-
-        } catch (Exception e) {
-            System.out.println("[ReducerServer] push to Master failed: " + e.getMessage());
-        }
-    }
-
 
 
 

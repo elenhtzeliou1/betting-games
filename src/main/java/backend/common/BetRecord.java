@@ -11,7 +11,7 @@ public class BetRecord {
     private final int randomNumber;
 
 
-    public BetRecord(String playerId, String gameName, BigDecimal bet
+    public BetRecord(String playerId, String gameName ,BigDecimal bet
                      , BigDecimal payout, int randomNumber){
         this.playerId = playerId;
         this.gameName = gameName;
