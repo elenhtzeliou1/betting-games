@@ -8,6 +8,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.math.BigDecimal;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.HashMap;
@@ -19,6 +20,10 @@ public class WorkerServer {
     private static final Map<String, GameState> gamesByName = new HashMap<>();
     // List<BetRecord> betHistory = new ArrayList<>();
 
+
+    // SecureRandomNumberGenerator Info
+    private static final String SRNG_HOST = "localhost";
+    private static final int SRNG_PORT = 8000;
 
     public static void main(String[] args) {
         int port;
@@ -77,12 +82,14 @@ public class WorkerServer {
             else if (inputString.startsWith("MAP_PROVIDER_PROFIT ")){
                 //handleProviderProfit(inputString, port,output);
                 return;
-
             } else if (inputString.startsWith("MAP_SEARCH ")) {
                 handleMapSearch(inputString,port,output);
                 return;
             } else if(inputString.startsWith("RATE ")){
                 handleGameRate(inputString,output);
+                return;
+            }else if(inputString.startsWith("PLAY ")){
+                handlePlayRequest(inputString,output);
                 return;
             }
 
@@ -103,11 +110,35 @@ public class WorkerServer {
         String json = new String(java.util.Base64.getDecoder().decode(b64), java.nio.charset.StandardCharsets.UTF_8);
 
         Game game = WorkerCustomJSONParser.parseGameJSON(json);
+        String gameNameKey = game.getGameName().trim().toLowerCase();
 
-        int total;
+        // Use 2 sychronized blocks for holding the loss for less seconds
+
+
+        // 1. First Sychronized Block Check if game exists
         synchronized (gamesByName) {
-            String gameNameKey = game.getGameName().trim().toLowerCase();
             if (gamesByName.containsKey(gameNameKey)) {
+                output.println("ERROR! This Game: " + game.getGameName() + " already exists!");
+                output.println("END");
+                return;
+            }
+        }
+        // Release the lock
+
+        // 2. Register the New Game to SRNG
+        try{
+            registerNewGameToSRNG(game.getGameName(), game.getHashKey(), 256);
+        }catch (Exception e){
+            output.println("ERROR Failed to Register the game to SRNG: "+e.getMessage());
+            output.println("END");
+            return;
+        }
+
+        // 3. Second Sychronized Block
+        // Check if containsKey(...) because in the mean time maybe another thread added this game
+        int total; // Just for our debug
+        synchronized (gamesByName){
+            if (gamesByName.containsKey(gameNameKey)){
                 output.println("ERROR! This Game: " + game.getGameName() + " already exists!");
                 output.println("END");
                 return;
@@ -115,6 +146,7 @@ public class WorkerServer {
             gamesByName.put(gameNameKey, new GameState(game, true));
             total = gamesByName.size();
         }
+
 
         String reply = "Worker (" + port + ") successfully stored: "
                 + game.getGameName()
@@ -231,7 +263,7 @@ public class WorkerServer {
                 for (GameState gs : gamesByName.values()) {
                     if (gs.getGame().getProviderName().equalsIgnoreCase(provider)) {
                         String gameName = gs.getGame().getGameName();
-                        double profit = gs.getTotalLossProfit();
+                        BigDecimal profit = gs.getTotalLossProfit();
                         out.println(gameName + "\t" + profit);
                     }
                 }
@@ -241,7 +273,6 @@ public class WorkerServer {
         }
 
     }
-
 
 
 
@@ -325,8 +356,6 @@ public class WorkerServer {
         }
     }
 
-
-
     private static void handleGameRate(String inputString, PrintWriter output){
         String payload = inputString.substring("RATE ".length()).trim();
         String[] parts = payload.split("\\|");
@@ -334,6 +363,7 @@ public class WorkerServer {
         if (parts.length !=3){
             output.println("ERROR bad RATE format. Expected: playerId|gameName|stars");
             output.println("END");
+            return;
         }
         String playerId = parts[0].trim();
         String gameName = parts[1].trim().toLowerCase();
@@ -377,5 +407,90 @@ public class WorkerServer {
         }
         output.println("END");
 
+    }
+
+
+    private static void handlePlayRequest(String inputString, PrintWriter output){
+        String payload = inputString.substring("PLAY ".length()).trim();
+        String[] parts = payload.split("\\|");
+
+        if(parts.length !=3){
+            output.println("ERROR bad PLAY format. Expected: playerId|gameName|bet");
+            output.println("END");
+            return;
+        }
+        String playerId = parts[0].trim();
+        String gameName = parts[1].trim().toLowerCase();
+        BigDecimal requestedBet;
+
+        try{
+            requestedBet = new BigDecimal(parts[2].trim());
+        }catch (NumberFormatException e){
+            output.println("ERROR Bet must be a valid decimal Number: "+e.getMessage());
+            output.println("END");
+            return;
+        }
+
+        GameState gameState;
+        synchronized (gamesByName){
+            gameState = gamesByName.get(gameName);
+        }
+
+        if(gameState==null){
+            // No game with this gameName exists!
+            output.println("Error, No Game found with gameName: "+gameName);
+            output.println("END");
+            return;
+        }
+
+        // allow play only if game is visible to player
+        if(!gameState.isActive()){
+            output.println("Error, This game is not available for playing!");
+            output.println("END");
+            return;
+        }
+        // Check if requestBet value is valid
+        // Requested bet should be greater or equal to min bet AND smaller or equal to Max Bet
+        BigDecimal minBet = gameState.getGame().getMinBet();
+        BigDecimal maxBet = gameState.getGame().getMaxBet();
+
+        if (requestedBet.compareTo(minBet)<0 || requestedBet.compareTo(maxBet)>0){
+            output.println("Error, Invalid Bet!");
+            output.println("Bet should be: "+minBet+" <= bet <= "+ maxBet);
+            output.println("END");
+            return;
+        }
+
+        // Call the RandomNumberGenerator
+        // Request: GET|gameId
+
+        // 1. worker gets number
+        // 2. Worker computes hash
+        // 3. Verify it locally
+        // 4. Compute player's payout
+        // 5. Add Bet Record
+
+
+        output.println("OK Play Request for GameName: "+gameName+ "completed!");
+        output.println("END");
+        return;
+    }
+
+    // Helping method for Registering New Game to SRNG
+    // Used when manager adds a new game to worker
+    // Used in handleAddNewGame()
+    private static void registerNewGameToSRNG(String gameName, String secret, int bufferSize) throws Exception{
+        try(Socket socket = new Socket(SRNG_HOST,SRNG_PORT);
+            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            PrintWriter output = new PrintWriter(socket.getOutputStream(),true)
+        ){
+            output.println("REGISTER "+gameName+"|"+secret+"|"+bufferSize);
+            output.println("END");
+
+            String SRNGResponse = input.readLine();
+            if(SRNGResponse == null || !SRNGResponse.equals("COMPLETE")){
+                throw new RuntimeException("SNRG Game registration failse: "+ SRNGResponse);
+            }
+        }
     }
 }

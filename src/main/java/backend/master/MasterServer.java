@@ -6,6 +6,7 @@ import backend.worker.Worker;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.math.BigDecimal;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
@@ -307,9 +308,7 @@ public class MasterServer {
             return;
         }
         else if(inputString.startsWith("PLAY ")){
-
-            //
-            //
+            handlePlayRequest(inputString,output);
             output.println("END");
             return;
         }else if (inputString.startsWith("RATE ")){
@@ -548,6 +547,41 @@ public class MasterServer {
         output.println("END");
     }
 
+    // Player's handle play() method implemetation
+    private static void handlePlayRequest(String inputString, PrintWriter output){
+        String payload = inputString.substring("PLAY ".length()).trim();
+        String[] parts = payload.split("\\|");
+        if(parts.length !=3){
+            output.println("ERROR bad PLAY format. Expected: playerId|gameName|bet");
+            output.println("END");
+            return;
+        }
+        // split the input to retrieve gameName
+        String playerId = parts[0].trim();
+        String gameName = parts[1].trim();
+        String bet = parts[2].trim();
+
+        try {
+            new BigDecimal(bet); // validation only
+        } catch (NumberFormatException e) {
+            output.println("ERROR Bet must be a valid decimal number");
+            output.println("END");
+            return;
+        }
+
+        // forward request to worker
+        Worker worker = chooseWorker(gameName);
+        String workerResponse = forwardMsgToWorker(worker, "PLAY "+playerId+"|"+gameName+"|"+bet);
+
+        // Send the response to player
+        for(String ln: workerResponse.split("\n")){
+            if(!ln.isBlank()) output.println(ln);
+        }
+        output.println("END");
+        return;
+    }
+
+
 
     // Player rate() method implementation:
     private static void  handlePlayerRate(String inputString, PrintWriter output){
@@ -575,8 +609,6 @@ public class MasterServer {
         }
         output.println("END");
         return;
-
-
     }
 
     // ------------------------------------------------------------------------------  //

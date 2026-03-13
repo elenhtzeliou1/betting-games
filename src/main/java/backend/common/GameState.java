@@ -1,5 +1,6 @@
 package backend.common;
 
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -7,30 +8,25 @@ public class GameState {
     private final Game game;
     private boolean isActive = true; // true by default
 
-    // Onereview per player for THIS game
+    // One review per player for THIS game
     // Map<String = userId, Rate> ratesByPlayerId
     private final Map<String,Rate> ratesByPlayerId = new HashMap<>();
 
-    private int noOfVotes;
-    private double stars;
 
     // total loss or profit for this exact game
     // implemented later
-    private double totalLossProfit = 0.0;
+    private BigDecimal totalLossProfit = BigDecimal.valueOf(0.0);
 
     public GameState(Game game, boolean isActive){
         if (game == null) throw new IllegalArgumentException("game == null");
         this.game= game;
         this.isActive = isActive;
 
-        // Every stored game has by default (by the given JSON) some stars and noOfVotes
-        // initialize stars and also initialize noOfVotes
-        this.noOfVotes = game.getNoOfVotes();
-        this.stars = game.getStars();
     }
 
     //getters and setters
     public Game getGame(){return this.game;}
+
     public synchronized boolean isActive(){
         return isActive;
     }
@@ -59,12 +55,15 @@ public class GameState {
             return true;
         }else{
             // rating already exists!
+            // return false
            return false;
         }
 
     }
 
     public synchronized boolean deleteExistingRate(String playerId){
+
+        playerId = playerId.trim().toLowerCase(); // normalize
         Rate rateForRemove = ratesByPlayerId.remove(playerId);
         if(rateForRemove == null) return false;
 
@@ -74,16 +73,13 @@ public class GameState {
         return true;
     }
 
-
-
-    public synchronized double getTotalLossProfit(){
+    public synchronized BigDecimal getTotalLossProfit(){
         return totalLossProfit;
     }
-    public synchronized void addProfitLoss(double delta){
-        this.totalLossProfit +=delta;
+
+    public synchronized void addProfitLoss(BigDecimal delta){
+        this.totalLossProfit = this.totalLossProfit.add(delta);
     }
-
-
 
     // Helping methods
     private void areStarsValueValid(int stars){

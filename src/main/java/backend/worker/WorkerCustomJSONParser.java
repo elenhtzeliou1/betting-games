@@ -5,6 +5,8 @@ import backend.common.RiskLevel;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 
+import java.math.BigDecimal;
+
 public class WorkerCustomJSONParser {
 
     public static Game parseGameJSON(String json) throws Exception{
@@ -18,8 +20,8 @@ public class WorkerCustomJSONParser {
         int noOfVotes = readIntValue(obj, "NoOfVotes");
 
         String gameLogo =  readStringValue(obj, "GameLogo");
-        double minBet = readDoubleValue(obj,"MinBet");
-        double maxBet = readDoubleValue(obj,"MaxBet");
+        BigDecimal minBet = readBigDecimalValue(obj,"MinBet");
+        BigDecimal maxBet = readBigDecimalValue(obj,"MaxBet");
 
         String riskLevelStr =  readStringValue(obj, "RiskLevel");
         String hashKey =  readStringValue(obj, "HashKey");
@@ -29,9 +31,9 @@ public class WorkerCustomJSONParser {
         if(providerName.isBlank()) throw new IllegalArgumentException("ProviderName is missing!");
         if (hashKey.isBlank()) throw new IllegalArgumentException("HashKey is missing!");
         if(stars < 0) throw new IllegalArgumentException("Stars must be >=0");
-        if(minBet<0) throw new IllegalArgumentException("MinBet must be >0!");
-        if(maxBet<0) throw new IllegalArgumentException("MaxBet must be >0!");
-        if(minBet>maxBet) throw new IllegalArgumentException("MaxBet should be greater than MinBet");
+        if(minBet.compareTo(BigDecimal.ZERO) <= 0) throw new IllegalArgumentException("MinBet must be >0!");
+        if(maxBet.compareTo(BigDecimal.ZERO)<=0 ) throw new IllegalArgumentException("MaxBet must be >0!");
+        if(minBet.compareTo(maxBet) > 0) throw new IllegalArgumentException("MaxBet should be greater than MinBet");
 
         RiskLevel riskLevel;
 
@@ -73,6 +75,19 @@ public class WorkerCustomJSONParser {
             return ((Number) raw).intValue();
         }
         return Integer.parseInt(raw.toString());
+    }
+
+    private static BigDecimal readBigDecimalValue(JSONObject obj, String key) {
+        Object raw = obj.get(key);
+        if (raw == null) {
+            return BigDecimal.ZERO;
+        }
+
+        if (raw instanceof Number) {
+            return new BigDecimal(raw.toString());
+        }
+
+        return new BigDecimal(raw.toString().trim());
     }
 
 }

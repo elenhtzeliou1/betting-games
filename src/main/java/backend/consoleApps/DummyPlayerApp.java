@@ -126,14 +126,53 @@ public class DummyPlayerApp {
         String cmd = "SEARCH " + playerId + "|" + minStars + "|" + betCategory + "|" + risk;
         output.println(cmd);
 
+        System.out.println();
+        System.out.println("Do you want to play?");
+        System.out.println("1. Yes");
+        System.out.println("2. No");
+        String playChoice = scanner.nextLine().trim();
+
+        switch (playChoice){
+            case "1":{
+                play(playerId, scanner,input, output);
+                //
+                //
+                break;
+            }
+            case "2":{
+                System.out.println("Continue with something else!");
+                break;
+            }
+            default:
+                System.out.println("Not Valid choice...");
+                break;
+
+        }
+
+
         System.out.println("\n--- SEARCH RESULTS ---");
         readMsgUntilEnd(input);
     }
 
-    // Play() method implementation
-    //
-    //
-    //
+    private static void play(String playerId, Scanner scanner,BufferedReader input ,PrintWriter output) throws Exception{
+        System.out.println("Select Game: ");
+        String gameName = scanner.nextLine().trim();
+        //
+        // Add validations
+        //
+        //
+        System.out.println("Give Bet: ");
+        String bet = scanner.nextLine().trim();
+
+        // Make the play request and send it to MasterServer
+        String cmd = "PLAY " +playerId +"|"+ gameName + "|" +bet;
+        output.println(cmd);
+
+        // Receive the answer
+        // Print it
+        readMsgUntilEnd(input);
+
+    }
 
     // Rate() method implementation
     // Let a user rate a game

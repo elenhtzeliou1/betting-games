@@ -1,5 +1,7 @@
 package backend.common;
 
+import java.math.BigDecimal;
+
 public class Game {
     private final String gameName;
     private final String providerName;
@@ -10,8 +12,8 @@ public class Game {
     private double starsSum; //counter for totalStars
 
     private String gameLogo;
-    private final double minBet;
-    private final double maxBet;
+    private final BigDecimal minBet;
+    private final BigDecimal maxBet;
 
     private RiskLevel riskLevel; // can change by manager
     private final String hashKey;
@@ -19,7 +21,7 @@ public class Game {
 
 
     public Game(String gameName,String providerName, double stars, int noOfVotes, String gameLogo,
-                double minBet,double maxBet, RiskLevel riskLevel, String hashKey){
+                BigDecimal minBet,BigDecimal maxBet, RiskLevel riskLevel, String hashKey){
         this.gameName = gameName;
         this.providerName = providerName;
         this.stars = stars;
@@ -50,10 +52,10 @@ public class Game {
     public String getGameLogo(){
         return this.gameLogo;
     }
-    public double getMinBet(){
+    public BigDecimal getMinBet(){
         return this.minBet;
     }
-    public double getMaxBet(){
+    public BigDecimal getMaxBet(){
         return this.maxBet;
     }
     public RiskLevel getRiskLevel(){
@@ -98,9 +100,9 @@ public class Game {
     }
 
 
-    private static String calculateBetCategory(double minBet){
-        if (minBet >=5) return "$$$";
-        if(minBet >=1) return "$$";
+    private static String calculateBetCategory(BigDecimal minBet){
+        if (minBet.compareTo(new BigDecimal("5"))>=0) return "$$$";
+        if(minBet.compareTo(new BigDecimal("1"))>=0) return "$$";
         return "$";
     }
 
