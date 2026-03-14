@@ -616,13 +616,22 @@ public class MasterServer {
         String gameName = parts[1].trim();
         String bet = parts[2].trim();
 
+        BigDecimal betAmount;
         try {
-            new BigDecimal(bet); // validation only
+           betAmount = new BigDecimal(bet); // validation only
         } catch (NumberFormatException e) {
             output.println("ERROR Bet must be a valid decimal number");
             output.println("END");
             return;
         }
+
+        if (betAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            output.println("ERROR Bet must be > 0");
+            output.println("END");
+            return;
+        }
+
+
         // Send the request to worker only if player's Balance is >= to his bet
         PlayerBalance playerBalance;
         synchronized (playerBalances){
@@ -638,15 +647,94 @@ public class MasterServer {
             output.println("END");
             return;
         }
+        // Subtract the bet for user's Balance
+        playerBalance.removeBalance(new BigDecimal(bet));
 
         // forward request to worker
         Worker worker = chooseWorker(gameName);
-        String workerResponse = forwardMsgToWorker(worker, "PLAY "+playerId+"|"+gameName+"|"+bet);
 
-        // Send the response to player
-        for(String ln: workerResponse.split("\n")){
-            if(!ln.isBlank()) output.println(ln);
+        String workerResponse;
+        try{
+            workerResponse = forwardMsgToWorker(worker, "PLAY "+playerId+"|"+gameName+"|"+bet);
+        }catch (Exception e) {
+            // refund on worker if communication failure
+            playerBalance.addBalance(betAmount);
+            output.println("ERROR Failed to contact worker: " + e.getMessage());
+            output.println("END");
+            return;
         }
+
+        if (workerResponse.isBlank()) {
+            playerBalance.addBalance(betAmount);
+            output.println("ERROR Empty response from worker");
+            output.println("END");
+            return;
+        }
+
+        String[] lines = workerResponse.split("\n");
+        String firstNonBlank = null;
+        for (String line : lines) {
+            if (!line.isBlank()) {
+                firstNonBlank = line.trim();
+                break;
+            }
+        }
+
+        if (firstNonBlank == null) {
+            playerBalance.addBalance(betAmount);
+            output.println("ERROR Empty response from worker");
+            output.println("END");
+            return;
+        }
+
+        if (firstNonBlank.startsWith("PLAY_RESULT")) {
+            String[] workerResponseParts = firstNonBlank.split("\\|");
+            if (workerResponseParts.length != 6) {
+                playerBalance.addBalance(betAmount);
+                output.println("ERROR Worker response bad format!");
+                output.println("END");
+                return;
+            }
+
+            try {
+                // workerResponseParts[4] is like "payout=123.45"
+                String payoutPart = workerResponseParts[4].trim();
+                if (!payoutPart.startsWith("payout=")) {
+                    throw new IllegalArgumentException("Missing payout field");
+                }
+
+                String payoutValue = payoutPart.substring("payout=".length()).trim();
+                BigDecimal payout = new BigDecimal(payoutValue);
+
+                playerBalance.addBalance(payout);
+
+
+            } catch (Exception e) {
+                // refund original bet if payout parsing fails
+                playerBalance.addBalance(betAmount);
+                output.println("ERROR Failed to parse worker payout: " + e.getMessage());
+                output.println("END");
+                return;
+            }
+        } else {
+            // worker reported an error, so refund the bet
+            playerBalance.addBalance(betAmount);
+        }
+
+        // Forward worker lines except END
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.isBlank()) {
+                continue;
+            }
+            if (trimmed.equals("END")) {
+                continue;
+            }
+            output.println(trimmed);
+            System.out.println(trimmed);
+        }
+
+        output.println("Player: " + playerId + " Balance: " + playerBalance.getBalance());
         output.println("END");
     }
 
