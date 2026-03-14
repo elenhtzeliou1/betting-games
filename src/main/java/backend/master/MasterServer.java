@@ -1,6 +1,7 @@
 package backend.master;
 
 import backend.common.GameProvider;
+import backend.common.PlayerBalance;
 import backend.common.RiskLevel;
 import backend.worker.Worker;
 
@@ -10,7 +11,6 @@ import java.io.PrintWriter;
 import java.math.BigDecimal;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.security.Provider;
 import java.util.*;
 
 import org.json.simple.JSONObject;
@@ -23,7 +23,8 @@ public class MasterServer {
     // Also needs to hold the reducer
 
     private static final List<Worker> workers = new ArrayList<>();
-    // Map<String,PlayerState> playersById (balance)
+    private static final Map<String, PlayerBalance> playerBalances = new HashMap<>();
+
     // Reducer reducer;
     //
 
@@ -210,15 +211,12 @@ public class MasterServer {
             return;
         }
         else if(inputString.startsWith("ADD_BALANCE ")){
-            System.out.println("Not implemented yet");
-            //
-            //
-            output.println("END");
+            handlePlayerAddBalanceRequest(inputString,output);
+            return;
+        } else if (inputString.startsWith("VIEW_BALANCE ")) {
+            handlePlayerViewBalanceRequest(inputString,output);
             return;
         }
-
-
-
         output.println("ERROR unknown player command");
         output.println("END");
     }
@@ -638,7 +636,6 @@ public class MasterServer {
         return;
     }
 
-
     // Player rate() method implementation:
     private static void  handlePlayerRate(String inputString, PrintWriter output){
         // Rate request from player comes like:
@@ -665,6 +662,74 @@ public class MasterServer {
         }
         output.println("END");
         return;
+    }
+
+    // Player addBalance() method implementation:
+    private static void handlePlayerAddBalanceRequest(String inputString, PrintWriter output){
+        //ADD_BALANCE "+userId+"|"+tokens
+        String payload = inputString.substring("ADD_BALANCE ".length()).trim();
+        String[] parts = payload.split("\\|");
+
+        if(parts.length != 2){
+            output.println("Error. Bad format, expected: ADD_BALANCE userId|tokens");
+            output.println("END");
+            return;
+        }
+        String userId = parts[0].trim();
+        if(userId.isBlank()){
+            output.println("Error, userId required!");
+            output.println("END");
+            return;
+        }
+        BigDecimal tokens;
+        try{
+            tokens = new BigDecimal(parts[1].trim());
+        } catch (NumberFormatException e) {
+            output.println("ERROR tokens must be a valid decimal number");
+            output.println("END");
+            return;
+        }
+        if (tokens.compareTo(BigDecimal.ZERO) <= 0) {
+            output.println("ERROR tokens must be > 0");
+            output.println("END");
+            return;
+        }
+
+        // Add the balance to user
+        PlayerBalance playerBalance;
+        synchronized (playerBalances){
+            playerBalance = playerBalances.get(userId);
+            if(playerBalance==null){
+                playerBalance = new PlayerBalance(BigDecimal.ZERO);
+                playerBalances.put(userId,playerBalance);
+            }
+        }
+
+        playerBalance.addBalance(tokens);
+        BigDecimal updatedBalance = playerBalance.getBalance();
+
+        output.println("OK balance added successfully for userId=" + userId + " | newBalance=" + updatedBalance);
+        output.println("END");
+    }
+
+
+    private static void handlePlayerViewBalanceRequest(String inputString, PrintWriter output){
+        String userId = inputString.substring("VIEW_BALANCE ".length()).trim().toLowerCase();
+
+        if(userId.isBlank()){
+            output.println("Error, userId is empty!");
+            output.println("END");
+            return;
+        }
+        PlayerBalance playerBalance = playerBalances.get(userId);
+        if(playerBalance == null){
+            output.println("This user doesnt exist!");
+            output.println("END");
+            return;
+        }
+
+        output.println("User: "+userId+" Balance: "+ playerBalance.getBalance());
+        output.println("END");
     }
 
     // ------------------------------------------------------------------------------  //

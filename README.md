@@ -76,3 +76,8 @@
         2. Search() using filters
         3. Play to a game
         4. Rate an available game
+    
+    Should add:
+        1. Hold player balance to a hashMap
+        2. Correctly update the player balance
+        3. Permit play if available tokens < player's bet

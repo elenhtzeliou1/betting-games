@@ -1,9 +1,9 @@
 package backend.consoleApps;
 
 import java.io.BufferedReader;
-import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.math.BigDecimal;
 import java.net.Socket;
 import java.util.Scanner;
 
@@ -43,6 +43,7 @@ public class DummyPlayerApp {
                 System.out.println("3. Play");
                 System.out.println("4. Rate Game");
                 System.out.println("5. Add Tokens");
+                System.out.println("6. View Balance");
                 System.out.println("0. Exit");
 
 
@@ -77,8 +78,13 @@ public class DummyPlayerApp {
                         break;
                     }
                     case "5":{
-                        // Perform AddToken() (increase player's balance by specific tokens)
-                        System.out.println("Not implemented yet");
+                        // Perform AddTokens() (increase player's balance by specific tokens)
+                        addTokens(scanner, output,input);
+                        break;
+                    }
+                    case "6":{
+                        // View player Balance
+                        viewBalance(scanner,output,input);
                         break;
                     }
                     default:
@@ -155,6 +161,7 @@ public class DummyPlayerApp {
 
     }
 
+    // play() method implementation
     private static void play(String playerId, Scanner scanner,BufferedReader input ,PrintWriter output) throws Exception{
         System.out.println("Select Game: ");
         String gameName = scanner.nextLine().trim();
@@ -204,6 +211,33 @@ public class DummyPlayerApp {
 
     }
 
+    private static void addTokens(Scanner scanner, PrintWriter output, BufferedReader input) throws Exception {
+        System.out.println("Give userId: ");
+        String userId = scanner.nextLine().trim();
+
+        System.out.println("Give token amount you want to add to your balance: ");
+        BigDecimal tokens = readBigDecimal(scanner, "Tokens should be > 0");
+
+
+        // Send request to Master Server
+        String cmd = "ADD_BALANCE "+userId+"|"+tokens;
+        output.println( cmd);
+
+        // Read His response
+        readMsgUntilEnd(input);
+    }
+
+    private static void viewBalance(Scanner scanner, PrintWriter output, BufferedReader input) throws Exception {
+        System.out.println("Give UserId: ");
+        String userId = scanner.nextLine().trim();
+
+        // Send request to MasterServer
+        output.println("VIEW_BALANCE "+userId);
+
+        // Read MasterServer's Response
+        readMsgUntilEnd(input);
+    }
+
     // ---------------------------------------------------------//
     // ---------------------------------------------------------//
     // ---------------------------------------------------------//
@@ -212,19 +246,38 @@ public class DummyPlayerApp {
     private static int readInt(Scanner scanner, String prompt, int min, int max) {
         while (true) {
             System.out.print(prompt);
-            String s = scanner.nextLine().trim();
+            String userInput = scanner.nextLine().trim();
             try {
-                int v = Integer.parseInt(s);
-                if (v < min || v > max) {
+                int givenNum = Integer.parseInt(userInput);
+                if (givenNum < min || givenNum > max) {
                     System.out.println("Please enter a number in range " + min + ".." + max);
                     continue;
                 }
-                return v;
+                return givenNum;
             } catch (Exception e) {
-                System.out.println("Invalid number.");
+                System.out.println("Invalid number value "+ e.getMessage());
             }
         }
     }
+
+    private static BigDecimal readBigDecimal(Scanner scanner, String prompt){
+        while(true){
+            System.out.println(prompt);
+            String userInput = scanner.nextLine().trim();
+            try{
+                BigDecimal tokens = new BigDecimal(userInput);
+                if(tokens.compareTo(BigDecimal.ZERO) <=0){
+                    System.out.println("Entered Tokens should be > 0 ");
+                    continue;
+                }
+                return tokens;
+            } catch (Exception e) {
+                System.out.println("Invalid token value." +e.getMessage());
+            }
+
+        }
+    }
+
 
     private static String readEnum(Scanner scanner, String prompt, String[] allowed, String def) {
         while (true) {
