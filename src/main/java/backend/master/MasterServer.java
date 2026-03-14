@@ -623,6 +623,21 @@ public class MasterServer {
             output.println("END");
             return;
         }
+        // Send the request to worker only if player's Balance is >= to his bet
+        PlayerBalance playerBalance;
+        synchronized (playerBalances){
+            playerBalance = playerBalances.get(playerId);
+        }
+        if(playerBalance == null){
+            output.println("This Player: "+playerId+" has 0 tokens. Add tokens to continue");
+            output.println("END");
+            return;
+        }
+        if(playerBalance.getBalance().compareTo(new BigDecimal(bet)) <0){
+            output.println("Insufficient balance for player: "+playerId+". Add balance to continue or lower your bet!");
+            output.println("END");
+            return;
+        }
 
         // forward request to worker
         Worker worker = chooseWorker(gameName);
@@ -633,7 +648,6 @@ public class MasterServer {
             if(!ln.isBlank()) output.println(ln);
         }
         output.println("END");
-        return;
     }
 
     // Player rate() method implementation:
