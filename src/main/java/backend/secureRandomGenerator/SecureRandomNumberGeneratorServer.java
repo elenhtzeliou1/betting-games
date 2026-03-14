@@ -41,7 +41,7 @@ public class SecureRandomNumberGeneratorServer {
                 // Let multiple worker's connection
                 // Multithreaded RandomGenerator
                 Socket socket = serverSocket.accept();
-                System.out.println("[RandomGeneratorServer] accepts worker connections from: " +
+                System.out.println("[RandomGeneratorServer] Accepted Worker connection from: " +
                         socket.getInetAddress().getHostAddress() + ":" + socket.getPort());
 
                 // Handle worker requests
@@ -123,6 +123,8 @@ public class SecureRandomNumberGeneratorServer {
                 RNGContext rngContext = new RNGContext(gameName,gameSecret,bufferSize);
                 games.put(gameName,rngContext);
             }
+
+            System.out.println("[SRNG | DEBUG] Game: "+gameName+" Register SUCCESSFULLY | bufferSize="+bufferSize);
             output.println("COMPLETE");
 
         }catch (NumberFormatException e){
@@ -151,8 +153,16 @@ public class SecureRandomNumberGeneratorServer {
                     output.println("Error, Game not found!");
                     return;
                 }
+                // -------
+                // [DEBUG]
+                System.out.println("[SRNG | DEBUG] GET NUMBER request for Game: "+ gameName);
 
                 int number = gameContext.getNumber();
+
+                // -------
+                // [DEBUG]
+                System.out.println("[SRNG | DEBUG] Number pulled for Game: "+gameName+" : ->"+number);
+
                 String shaNumStr = Integer.toString(number);
                 String hash = HashHelper.sha256(shaNumStr+gameContext.getSecret());
 
@@ -182,7 +192,7 @@ public class SecureRandomNumberGeneratorServer {
                 context = games.remove(gameName);
             }
             if (context== null){
-                output.print("Error, No game found for gameName: "+ gameName);
+                output.println("Error, No game found for gameName: "+ gameName);
                 return;
             }
             context.stop();

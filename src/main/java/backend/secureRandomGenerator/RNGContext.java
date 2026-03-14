@@ -22,6 +22,7 @@ public class RNGContext {
         return buffer.getNumber();
     }
     public void stop(){
+        System.out.println("[SRNG | DEBUG] STOPPING PRODUCER"); // DEBUG
         producer.stopRunning();
         producerThread.interrupt();
     }

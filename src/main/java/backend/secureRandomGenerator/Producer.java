@@ -26,17 +26,24 @@ public class Producer implements Runnable {
         while (isRunning()){
             try {
                 int newRN = random.nextInt(Integer.MAX_VALUE);
+                // [DEBUG]
+                System.out.println("[PRODUCER | DEBUG]" + Thread.currentThread().getName() + " generated=" + newRN);
+
                 buffer.addNumber(newRN);
             }catch (InterruptedException e){
                 Thread.currentThread().interrupt();
+
+                // [DEBUG]
+                System.out.println("[PRODUCER | DEBUG]" + Thread.currentThread().getName() + "interrupted -> stopping" );
+
                 break;
             }catch (Exception e){
                 System.out.println("Producer error: "+ e.getMessage());
             }
+
+            System.out.println("[PRODUCER | DEBUG] " + Thread.currentThread().getName() + " stopped");
         }
     }
-
-
 
 
 }

@@ -34,11 +34,14 @@ public class GameState {
         return isActive;
     }
 
-    // helping method for changing (flipping) current visibility of the game that user wants to change
-    public synchronized boolean flipCurrentActiveState(){
-        this.isActive = !this.isActive;
-        return this.isActive;
+    // helping method setting game visibility inactive
+    public synchronized void setVisibilityInactive(){
+        this.isActive = false;
     }
+    public synchronized void setVisibilityActive(){
+        this.isActive = true;
+    }
+
     public synchronized boolean addRate(String playerId, int stars){
 
         playerId = playerId.trim().toLowerCase(); //normalize

@@ -148,7 +148,7 @@ public class ReducerServer {
 
         // Merge this worker's partial output into the job state.
         // SearchJob is synchronized internally to protect its counters + merged map.
-        job.addPartial(gameLines);
+        job.addPartialResults(gameLines);
 
         // Tell worker we got it
         out.println("ACK");

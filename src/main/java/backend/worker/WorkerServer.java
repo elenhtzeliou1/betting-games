@@ -77,7 +77,7 @@ public class WorkerServer {
                 handleUpdateGameRisk(inputString,output);
                 return;
             } else if (inputString.startsWith("DELETE_EXISTING_GAME ")) {
-                handleChangeGameVisibility(inputString,output);
+                handleSetGameVisibilityInactive(inputString,output);
                 return;
             }
             else if (inputString.startsWith("MAP_PROVIDER_PROFIT ")){
@@ -113,41 +113,46 @@ public class WorkerServer {
         Game game = WorkerCustomJSONParser.parseGameJSON(json);
         String gameNameKey = game.getGameName().trim().toLowerCase();
 
-        // Use 2 sychronized blocks for holding the loss for less seconds
+        // Use 2 sychronized blocks for holding the lock for less seconds
 
+        // 1. First Sychronized Block, Check if game exists
 
-        // 1. First Sychronized Block Check if game exists
         synchronized (gamesByName) {
             if (gamesByName.containsKey(gameNameKey)) {
                 output.println("ERROR! This Game: " + game.getGameName() + " already exists!");
                 output.println("END");
                 return;
             }
-        }
-        // Release the lock
 
+        }
         // 2. Register the New Game to SRNG
         try{
-            registerNewGameToSRNG(game.getGameName(), game.getHashKey(), 256);
+            // CHANGE BUFFER SIZE
+            registerNewGameToSRNG(game.getGameName(), game.getHashKey(), 10);
         }catch (Exception e){
             output.println("ERROR Failed to Register the game to SRNG: "+e.getMessage());
             output.println("END");
             return;
         }
 
-        // 3. Second Synchronized Block
-        // Check if containsKey(...) because in the mean time maybe another thread added this game
+        // 3. If register to SRNG complete, add it to gamesByName
         int total; // Just for our debug
         synchronized (gamesByName){
-            if (gamesByName.containsKey(gameNameKey)){
-                output.println("ERROR! This Game: " + game.getGameName() + " already exists!");
+            if(gamesByName.containsKey(gameNameKey)){
+                // If some other thread already added it
+                // Delete it from SRNG
+                try{
+                    deleteGameFromSRNG(game.getGameName());
+                }catch (Exception ignore){
+                }
+                output.println("Error, This Game: "+game.getGameName()+" already exists!");
                 output.println("END");
                 return;
             }
+            // else add it
             gamesByName.put(gameNameKey, new GameState(game, true));
             total = gamesByName.size();
         }
-
 
         output.println("STORED"); // Message for MasterServerOnly
 
@@ -227,7 +232,7 @@ public class WorkerServer {
 
     }
     
-    private static void handleChangeGameVisibility(String inputString, PrintWriter output){
+    private static void handleSetGameVisibilityInactive (String inputString, PrintWriter output){
         String gameName = inputString.substring("DELETE_EXISTING_GAME ".length()).toLowerCase().trim();
 
         if(gameName.isBlank()){
@@ -245,10 +250,19 @@ public class WorkerServer {
             return;
         }
 
-        // method flipCurrentActiveState() is sychronized
-        // no need for new sychronized () block here
-        boolean newIsActive = gameState.flipCurrentActiveState();
-        output.println("Visibility Changed for: "+gameName+" to: " + newIsActive);
+        // delete (set visibility inactive) the method (setVisibilityInactive()) is sycronized in GameState.java
+        gameState.setVisibilityInactive();
+
+        // Stop the SRNG
+        try{
+            deleteGameFromSRNG(gameState.getGame().getGameName());
+        }catch (Exception e){
+            output.println("Warning! Game set inactive but failed to stop SRNG");
+            output.println("END");
+            return;
+        }
+
+        output.println("Visibility Changed for: "+gameName+" to: " + gameState.isActive());
         output.println("END");
 
     }
@@ -443,7 +457,7 @@ public class WorkerServer {
         String[] parts = payload.split("\\|");
 
         if(parts.length !=3){
-            output.println("ERROR bad PLAY format. Expected: playerId|gameName|bet");
+            output.println("ERROR, bad PLAY format. Expected: playerId|gameName|bet");
             output.println("END");
             return;
         }
@@ -454,7 +468,7 @@ public class WorkerServer {
         try{
             requestedBet = new BigDecimal(parts[2].trim());
         }catch (NumberFormatException e){
-            output.println("ERROR Bet must be a valid decimal Number: "+e.getMessage());
+            output.println("ERROR, Bet must be a valid decimal Number: "+e.getMessage());
             output.println("END");
             return;
         }
@@ -547,11 +561,6 @@ public class WorkerServer {
             output.println("ERROR PLAY request failed: "+e.getMessage());
             output.println("END");
         }
-
-
-        output.println("OK Play Request for GameName: "+gameName+ "completed!");
-        output.println("END");
-        return;
     }
 
     // Helping method for Registering New Game to SRNG
@@ -567,6 +576,24 @@ public class WorkerServer {
             String SRNGResponse = input.readLine();
             if(SRNGResponse == null || !SRNGResponse.equals("COMPLETE")){
                 throw new RuntimeException("SNRG Game registration failse: "+ SRNGResponse);
+            }
+        }
+    }
+
+    // Helpring method for Deleting (Hide) this game from SRNG
+    // Used in handleAddNewGame() when some other thread added first from another thread the game
+    // && Used in setGameVisibilityInactive()
+    private static void  deleteGameFromSRNG(String gameName) throws Exception{
+        try(Socket socket = new Socket(SRNG_HOST,SRNG_PORT);
+            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            PrintWriter output = new PrintWriter(socket.getOutputStream(),true)
+        ){
+            // Send the request to SRNG
+            output.println("DELETE "+ gameName);
+
+            String srngResponse = input.readLine();
+            if(srngResponse==null || !srngResponse.equals("COMPLETE")){
+                throw new RuntimeException("SRNG game stop failed: "+ srngResponse);
             }
         }
     }
