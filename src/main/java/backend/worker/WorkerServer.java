@@ -79,8 +79,10 @@ public class WorkerServer {
             } else if (inputString.startsWith("DELETE_EXISTING_GAME ")) {
                 handleSetGameVisibilityInactive(inputString,output);
                 return;
-            }
-            else if (inputString.startsWith("MAP_PROVIDER_PROFIT ")){
+            } else if (inputString.startsWith("MAKE_VISIBLE ")) {
+                handleSetGameVisibilityActive(inputString,output);
+                return;
+            } else if (inputString.startsWith("MAP_PROVIDER_PROFIT ")){
                 handleProviderProfit(inputString, port,output);
                 return;
             } else if (inputString.startsWith("MAP_SEARCH ")) {
@@ -116,7 +118,6 @@ public class WorkerServer {
         // Use 2 sychronized blocks for holding the lock for less seconds
 
         // 1. First Sychronized Block, Check if game exists
-
         synchronized (gamesByName) {
             if (gamesByName.containsKey(gameNameKey)) {
                 output.println("ERROR! This Game: " + game.getGameName() + " already exists!");
@@ -265,6 +266,50 @@ public class WorkerServer {
         output.println("Visibility Changed for: "+gameName+" to: " + gameState.isActive());
         output.println("END");
 
+    }
+
+    private static void handleSetGameVisibilityActive(String inputString, PrintWriter output){
+        String gameName = inputString.substring("MAKE_VISIBLE ".length()).trim().toLowerCase();
+        if(gameName.isBlank()){
+            output.println("Error, GameName is empty!");
+            output.println("END");
+            return;
+        }
+        GameState gameState;
+        synchronized (gamesByName){
+            gameState = gamesByName.get(gameName);
+        }
+        if(gameState ==null){
+            output.println("Error, no Game found with name: "+ gameName);
+            output.println("END");
+            return;
+        }
+        String realGameName;
+        String secret;
+        synchronized (gameState){
+            if(gameState.isActive()){
+                output.println("Game: "+gameName+" is already Visible!");
+                output.println("END");
+                return;
+            }
+            realGameName = gameState.getGame().getGameName();
+            secret = gameState.getGame().getHashKey();
+        }
+        // Start SRNG first
+        try{
+            // CHANGE BUFFER SIZE
+            registerNewGameToSRNG(gameState.getGame().getGameName(), gameState.getGame().getHashKey(), 10);
+        }catch (Exception e){
+            output.println("ERROR Failed to Register the game to SRNG: "+e.getMessage());
+            output.println("END");
+            return;
+        }
+
+        gameState.setVisibilityActive(); // setVisibilityActive is synchronized
+
+        output.println("Game: "+gameName+" is now visivle to players! ");
+        output.println("END");
+        return;
     }
 
     private static void handleProviderProfit(String inputString, int port, PrintWriter output) throws Exception{

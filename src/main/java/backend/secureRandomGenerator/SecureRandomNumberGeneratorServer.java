@@ -13,7 +13,7 @@ import java.util.Map;
 // Worker requests:
 //  - Register Game
 //  - Delete Game
-//  - Get Random Number
+//  - Get Number
 public class SecureRandomNumberGeneratorServer {
 
     // always on worker connects with it

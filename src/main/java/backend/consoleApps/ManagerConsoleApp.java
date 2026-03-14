@@ -40,13 +40,14 @@ public class ManagerConsoleApp {
             //
             do{
                 System.out.println("=== MANAGER MENU ===");
-                System.out.println("1. ADD_NEW_GAME");
-                System.out.println("2. DELETE_EXISTING_GAME");
-                System.out.println("3. UPDATE_GAME_RISK");
-                System.out.println("4. SHOW_TOTAL_PROFITS_DAMAGES_PER_GAME");
-                System.out.println("5. PROFIT_DAMAGES_PER_PROVIDER");
-                System.out.println("6. SHOW TOTAL_PROFIT_DAMAGES_FOR_SPECIFIC_PLAYER");
-                System.out.println("7. SHOW ALL GAMES");
+                System.out.println("1. Add new Game");
+                System.out.println("2. Delete existing game");
+                System.out.println("3. Make an existing game visible again");
+                System.out.println("4. Update game Risk");
+                System.out.println("5. Show total Profit/Loss for specific provider");
+                System.out.println("6. Show total Profit/Loss for specific player");
+                System.out.println("7. Show all games");
+                System.out.println("8. Show total Profit/Loss for all games");
                 System.out.println("0. EXIT");
 
                 choice = scanner.nextLine().trim();
@@ -62,73 +63,39 @@ public class ManagerConsoleApp {
                 switch(choice){
 
                     case "1": {
-                        // Add New Game
-                        System.out.println("[Adding Game] Give JSON File path: ");
-                        String path = scanner.nextLine().trim();
-
-                        String json = Files.readString(Paths.get(path), StandardCharsets.UTF_8);
-
-                        // use base64 encoding to keep it 1line
-                        String base64encoding = Base64.getEncoder().encodeToString(json.getBytes(StandardCharsets.UTF_8));
-
-                        //send the request to MasterServer
-                        output.println("ADD_NEW_GAME " + base64encoding);
-
-                        //echo it for debugging:
-                        System.out.println("[Adding Game] Path you gave: " + path);
-
-                        //read the masterServers Response
-                        readMsgUntilEnd(input);
-
+                        // Case: Add new game
+                        addNewGame(scanner, input, output);
                         break;
                     }
-
                     case "2": {
-                        // Change Game Visibility for Player
+                        // Case: Delete an existing game (Make game not Visible for Player)
 
                         // 1. Show all games if there are any:
                         boolean noGames = showAllGamesOrReturnNoGames(input, output);
                         if (noGames) break; // go back to menu
 
-                        // 2. Ask user (manager) for GameName:
-                        System.out.println("Give GameName to Flip it's Visibility: ");
-                        String gameName = scanner.nextLine().trim();
-
-                        // 3. Send Request to MasterServer
-                        output.println("DELETE_EXISTING_GAME " + gameName);
-
-                        // 4. Show the result
-                        readMsgUntilEnd(input);
+                        // 2. Delete an existing game (Make game not Visible for Player)
+                        deleteExistingGame(scanner, input,output);
                         break;
                     }
                     case "3": {
-                        // --- Update Risk Level of Specific Game
+                        // Case: Make an existing game visible to player again
+
+                        // 1. Show all games if there are any
+                        boolean noGames = showAllGamesOrReturnNoGames(input, output);
+                        if (noGames) break; // go back to menu
+
+                        makeExistingGameVisible(scanner,input,output);
+                        break;
+                    }
+                    case "4": {
+                        // Case: Update Risk Level of Specific Game
 
                         // 1. show all games:
                         boolean noGames = showAllGamesOrReturnNoGames(input, output);
                         if (noGames) break; // go back to menu
 
-                        // 2. Ask user (manager) for GameName:
-                        System.out.println("Give GameName: ");
-                        String gameName = scanner.nextLine().trim();
-
-                        // 3. Ask user for the ProviderName
-                        System.out.println("Give ProviderName: ");
-                        String providerName = scanner.nextLine().trim();
-
-                        // 4. Ask for the new RiskLevel
-                        System.out.println("Give new Risk Level: (low | medium | high)");
-                        String riskLevel = scanner.nextLine().trim();
-
-                        // 5. Send the request to MasterServer
-                        output.println("UPDATE_GAME_RISK " + gameName + "|" + providerName + "|" + riskLevel);
-
-                        // 6. Show the Result
-                        readMsgUntilEnd(input);
-                        break;
-                    }
-                    case "4": {
-                        System.out.println("Not implemented yet!");
+                        updateGameRisk(scanner,input,output);
                         break;
                     }
                     case "5": {
@@ -167,6 +134,71 @@ public class ManagerConsoleApp {
             System.out.println("Manager Disconnected");
         }
     }
+
+    private static void addNewGame(Scanner scanner, BufferedReader input, PrintWriter output) throws Exception {
+        // Add New Game
+        System.out.println("[Adding Game] Give JSON File path: ");
+        String path = scanner.nextLine().trim();
+
+        String json = Files.readString(Paths.get(path), StandardCharsets.UTF_8);
+
+        // use base64 encoding to keep it 1line
+        String base64encoding = Base64.getEncoder().encodeToString(json.getBytes(StandardCharsets.UTF_8));
+
+        //send the request to MasterServer
+        output.println("ADD_NEW_GAME " + base64encoding);
+
+        //echo it for debugging:
+        System.out.println("[Adding Game] Path you gave: " + path);
+
+        //read the masterServers Response
+        readMsgUntilEnd(input);
+    }
+
+    private static void deleteExistingGame(Scanner scanner, BufferedReader input, PrintWriter output) throws Exception {
+        // 1. Ask user (manager) for GameName:
+        System.out.println("Give GameName to delete (Make it not visible to Player): ");
+        String gameName = scanner.nextLine().trim();
+
+        // 2. Send Request to MasterServer
+        output.println("DELETE_EXISTING_GAME " + gameName);
+
+        // 3. Show the result
+        readMsgUntilEnd(input);
+    }
+
+    private static void updateGameRisk(Scanner scanner, BufferedReader input, PrintWriter output) throws Exception {
+        // 2. Ask user (manager) for GameName:
+        System.out.println("Give GameName: ");
+        String gameName = scanner.nextLine().trim();
+
+        // 3. Ask user for the ProviderName
+        System.out.println("Give ProviderName: ");
+        String providerName = scanner.nextLine().trim();
+
+        // 4. Ask for the new RiskLevel
+        System.out.println("Give new Risk Level: (low | medium | high)");
+        String riskLevel = scanner.nextLine().trim();
+
+        // 5. Send the request to MasterServer
+        output.println("UPDATE_GAME_RISK " + gameName + "|" + providerName + "|" + riskLevel);
+
+        // 6. Show the Result
+        readMsgUntilEnd(input);
+    }
+
+    private static void  makeExistingGameVisible(Scanner scanner, BufferedReader input, PrintWriter output) throws Exception {
+        // 1. Ask the manager for GameName
+        System.out.println("Give GameName to make it visible to player: ");
+        String gameName = scanner.nextLine().trim();
+
+        // 2. Send Request to MasterServer
+        output.println("MAKE_VISIBLE "+gameName);
+
+        // 3. Show MasterServer's response
+        readMsgUntilEnd(input);
+    }
+
 
     // helper method for multilines responses
     private static void readMsgUntilEnd(BufferedReader input) throws Exception{

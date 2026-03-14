@@ -173,6 +173,9 @@ public class MasterServer {
         }else if(inputString.startsWith("FIND_PROVIDER_PROFIT_LOSS ")){
             handleFindSpecifProviderProfitLossRequest(inputString,output);
             return;
+        } else if (inputString.startsWith("MAKE_VISIBLE ")) {
+            handleMakeGameVisibleAgain(inputString,output);
+            return;
         }
         // complete with more manager requests
 
@@ -345,6 +348,23 @@ public class MasterServer {
         }
         output.println("END");
     }
+
+   private static void handleMakeGameVisibleAgain(String inputString, PrintWriter output){
+        String gameName = inputString.substring("MAKE_VISIBLE ".length()).trim();
+
+        if(gameName.isBlank()){
+            output.println("Error, Game name is empty!");
+            output.println("END");
+            return;
+        }
+        Worker worker = chooseWorker(gameName);
+        String workerResponse = forwardMsgToWorker(worker,"MAKE_VISIBLE "+gameName);
+
+       for(String ln : workerResponse.split("\n")){
+           if(!ln.isBlank()) output.println(ln);
+       }
+       output.println("END");
+   }
 
     private static void handleFindSpecifProviderProfitLossRequest(String inputString, PrintWriter output){
         String providerName = inputString.substring("FIND_PROVIDER_PROFIT_LOSS ".length()).trim();
