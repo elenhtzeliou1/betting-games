@@ -28,7 +28,6 @@
     If error occures in the process the error is send to the Worker. If not the correct number is send to the worker alongside the Secret.
 
 
-
 ## - RNGConext.java:
     Represents the SRNG State of ONE Game. It holds everything that SRNG Server needs for THIS game.
     
@@ -58,9 +57,8 @@
         2. Delete existing game
         3. Update game risk
         4. Show all existing games
-        
+        5. Makes existing games again visible to players
     Should add:
-        1. Set game visibility back to true (make it visible to player)
         2. Show specific provider profits/losses
         3. Show specific player profits/losses
         
@@ -80,4 +78,4 @@
         6. See his total tokens
     
     Should add:
-        3. Add/Subtract profit/loss from player balance
+        1. Continue playing to a game and exit only if user asks

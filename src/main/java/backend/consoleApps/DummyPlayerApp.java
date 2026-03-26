@@ -1,13 +1,22 @@
 package backend.consoleApps;
 
+import backend.common.SearchResult;
+
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.math.BigDecimal;
 import java.net.Socket;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Scanner;
 
 public class DummyPlayerApp {
+
+    private static final List<SearchResult> lastSearchResults = new ArrayList<>();
+    private static String lastPlayerIdThatSearched = null;
+
 
     public static void main(String[] args) {
         String masterHost =  "localhost";
@@ -69,7 +78,9 @@ public class DummyPlayerApp {
                     }
                     case "3":{
                         // Perform Play()
-                        System.out.println("Not implemented yet");
+                        System.out.println("Give playerId (e.g. user123): ");
+                        String playerId = scanner.nextLine().trim();
+                        play(playerId,scanner,input,output);
                         break;
                     }
                     case "4":{
@@ -132,12 +143,24 @@ public class DummyPlayerApp {
         String cmd = "SEARCH " + playerId + "|" + minStars + "|" + betCategory + "|" + risk;
         output.println(cmd);
 
-        System.out.println("\n--- SEARCH RESULTS ---");
-        readMsgUntilEnd(input);
+        List<SearchResult> results = readAndStoreSearchResults(input);
+        //clear lastSearchResults list
+        lastSearchResults.clear();
+        lastSearchResults.addAll(results);
+        lastPlayerIdThatSearched = playerId;
 
+        if(lastSearchResults.isEmpty()){
+            System.out.println("No games found!");
+            return;
+        }
+
+        System.out.println("\n--- SEARCH RESULTS ---");
+        for(int i=0; i< lastSearchResults.size();i++){
+            System.out.println((i+1)+". "+ lastSearchResults.get(i));
+        }
 
         System.out.println();
-        System.out.println("Do you want to play?");
+        System.out.println("Do you want to play from these results?");
         System.out.println("1. Yes");
         System.out.println("2. No");
         String playChoice = scanner.nextLine().trim();
@@ -145,8 +168,6 @@ public class DummyPlayerApp {
         switch (playChoice){
             case "1":{
                 play(playerId, scanner,input, output);
-                //
-                //
                 break;
             }
             case "2":{
@@ -163,13 +184,28 @@ public class DummyPlayerApp {
 
     // play() method implementation
     private static void play(String playerId, Scanner scanner,BufferedReader input ,PrintWriter output) throws Exception{
-        System.out.println("Select Game: ");
-        String gameName = scanner.nextLine().trim();
 
-        if(gameName.isBlank()){
-            System.out.println("GameName is blank!");
+        if(lastSearchResults.isEmpty()){
+            System.out.println("You must search first! No saved results found!");
             return;
         }
+
+        if(lastSearchResults==null || !lastPlayerIdThatSearched.equalsIgnoreCase(playerId)){
+            System.out.println("You can only play using the latest search results of the same player!");
+            return;
+        }
+
+        System.out.println("Select Game, from the last search results: ");
+        for(int i=0; i< lastSearchResults.size(); i++){
+            System.out.println((i+1)+". "+lastSearchResults.get(i));
+        }
+
+        // Play repeteadly if player balance enough to place minBet to this game
+        // Ask everytime the player if he want to quit
+        int choice = readInt(scanner, "Select game number: ", 1, lastSearchResults.size());
+        SearchResult selectedGame = lastSearchResults.get(choice - 1);
+
+
         System.out.println("Give Bet: ");
         String bet = scanner.nextLine().trim();
 
@@ -179,7 +215,7 @@ public class DummyPlayerApp {
         }
 
         // Make the play request and send it to MasterServer
-        String cmd = "PLAY " +playerId +"|"+ gameName + "|" +bet;
+        String cmd = "PLAY " +playerId +"|"+ selectedGame.getGameName() + "|" +bet;
         output.println(cmd);
 
         // Receive the answer from MasterServer
@@ -298,5 +334,39 @@ public class DummyPlayerApp {
             if(line.equals("END")) break;
             System.out.println(line);
         }
+    }
+
+
+    private static List<SearchResult> readAndStoreSearchResults(BufferedReader input) throws Exception {
+        List<SearchResult> results = new ArrayList<>();
+
+        String ln;
+        while((ln = input.readLine())!=null){
+            if(ln.equals("END")) break;
+
+            ln = ln.trim();
+            if(ln.isBlank()) continue;
+
+            if(ln.startsWith("GAME|")){
+                String[] parts = ln.split("\\|");
+                if(parts.length ==8){
+                    //correct line
+                    SearchResult result = new SearchResult(
+                            parts[1].trim(), // gameName
+                            parts[2].trim(), // providerName
+                            parts[3].trim(), // stars
+                            parts[4].trim(), // betCategory
+                            parts[5].trim(), // risk
+                            parts[6].trim(), // minBet
+                            parts[7].trim()  // maxBet
+                    );
+                    results.add(result);
+                }else{
+                    // wrong line error msg => print it
+                    System.out.println(ln);
+                }
+            }
+        }
+        return results;
     }
 }

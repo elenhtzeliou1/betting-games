@@ -1,0 +1,11 @@
+{
+  "GameName":"Reactoonz500",
+  "ProviderName": "PlayNGo",
+  "Stars": 5,
+  "NoOfVotes": 242,
+  "GameLogo": "/usr/bin/images/gameLogo.png",
+  "MinBet": 0.1,
+  "MaxBet":100,
+  "RiskLevel": "high",
+  "HashKey": "REACT"
+}

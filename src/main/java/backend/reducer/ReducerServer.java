@@ -28,6 +28,7 @@ public class ReducerServer {
     private static final Object JOBS_LOCK = new Object();
     private static final Map<String, SearchJob> searchJobs = new HashMap<>();
     private static final Map<String, ProviderProfitJob> providerJobs = new HashMap<>();
+    private static final Map<String, PlayerProfitJob> playerJobs = new HashMap<>();
 
     // -----------------------------
     // Server starting
@@ -56,7 +57,7 @@ public class ReducerServer {
                 // can accept multiple worker connections at the same time
                 // each workers
                 Socket socket = serverSocket.accept();
-                new Thread(() -> handleConnection(socket)).start();
+                new Thread(() -> handleWorkerConnection(socket)).start();
             }
         }catch (Exception e){
             System.out.println("[ReducerServer] Error: "+ e.getMessage());
@@ -73,7 +74,7 @@ public class ReducerServer {
      *     GAME|...
      *     END
      */
-    private static void handleConnection(Socket socket){
+    private static void handleWorkerConnection(Socket socket){
         try (socket;
              BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
              PrintWriter out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true))
@@ -86,9 +87,15 @@ public class ReducerServer {
                 handleMapSearch(firstLine,in,out);
                 return;
             }
-            //
-            //
-            //
+            else if(firstLine.startsWith("MAP_PROVIDER_PROFIT ")){
+                handleMapProviderProfit(firstLine,in,out);
+                return;
+            }
+            else if(firstLine.startsWith("MAP_PLAYER_PROFIT ")){
+                handleMapPlayerProfit(firstLine,in,out);
+                return;
+
+            }
             out.println("ERROR Unknown reducer command: "+ firstLine);
             out.println("END");
 
@@ -121,23 +128,41 @@ public class ReducerServer {
             out.println("END");
             return;
         }
-        String jobId =header[1];
-        int expectedN = Integer.parseInt(header[2]);
+        String jobId =header[1].trim();
+        if (jobId.isBlank()) {
+            out.println("ERROR MAP_SEARCH jobId is empty");
+            out.println("END");
+            return;
+        }
 
+        int expectedN;
+        try {
+            expectedN = Integer.parseInt(header[2].trim());
+        } catch (NumberFormatException e) {
+            out.println("ERROR MAP_SEARCH expectedN must be an integer");
+            out.println("END");
+            return;
+        }
+
+        if (expectedN <= 0) {
+            out.println("ERROR MAP_SEARCH expectedN must be > 0");
+            out.println("END");
+            return;
+        }
 
         // Read worker's partial lines until END
         List<String> gameLines = new ArrayList<>();
         String line;
         while((line = in.readLine())!=null){
-            if("END".equals(line)) break;
             line = line.trim();
+            if("END".equals(line)) break;
             if(!line.isEmpty()) gameLines.add(line);
         }
         // Find or create job stat
         SearchJob job;
         synchronized (JOBS_LOCK){
             job = searchJobs.get(jobId);
-            if(job==null){
+            if(job ==null){
                 job = new SearchJob(jobId,expectedN, MASTER_HOST, MASTER_CALLBACK_PORT);
                 searchJobs.put(jobId,job);
 
@@ -155,6 +180,141 @@ public class ReducerServer {
     }
 
 
+    private static void   handleMapProviderProfit(String firstLine, BufferedReader in, PrintWriter out) throws IOException {
+        // Header we expect:
+        // MAP_PROVIDER_PROFIT <jobId> <providerName> <expectedN>
+
+        String[] header = firstLine.trim().split("\\s+");
+        if (header.length != 4) {
+            out.println("ERROR bad MAP_PROVIDER_PROFIT header. Expected: MAP_PROVIDER_PROFIT <jobId> <providerName> <expectedN>");
+            out.println("END");
+            return;
+        }
+
+        String jobId = header[1].trim();
+        String providerName = header[2].trim();
+
+        if (jobId.isBlank()) {
+            out.println("ERROR MAP_PROVIDER_PROFIT jobId is empty");
+            out.println("END");
+            return;
+        }
+
+        if (providerName.isBlank()) {
+            out.println("ERROR MAP_PROVIDER_PROFIT providerName is empty");
+            out.println("END");
+            return;
+        }
+
+        int expectedN;
+        try {
+            expectedN = Integer.parseInt(header[3].trim());
+        } catch (NumberFormatException e) {
+            out.println("ERROR MAP_PROVIDER_PROFIT expectedN must be an integer");
+            out.println("END");
+            return;
+        }
+
+        if (expectedN <= 0) {
+            out.println("ERROR MAP_PROVIDER_PROFIT expectedN must be > 0");
+            out.println("END");
+            return;
+        }
+
+        // Read worker partial lines until END
+        List<String> partialLines = new ArrayList<>();
+        String line;
+        while ((line = in.readLine()) != null) {
+            line = line.trim();
+            if ("END".equals(line)) {
+                break;
+            }
+            if (!line.isEmpty()) {
+                partialLines.add(line);
+            }
+        }
+
+        ProviderProfitJob job;
+        synchronized (JOBS_LOCK) {
+            job = providerJobs.get(jobId);
+            if (job == null) {
+                job = new ProviderProfitJob(jobId, providerName, expectedN, MASTER_HOST, MASTER_CALLBACK_PORT);
+                providerJobs.put(jobId, job);
+
+                // Notify any waiting threads that this job now exists
+                JOBS_LOCK.notifyAll();
+            }
+        }
+
+        // Merge this worker's partial result into reducer state
+        job.addPartialResults(partialLines);
+
+        // Acknowledge worker
+        out.println("ACK");
+    }
 
 
+    private static void handleMapPlayerProfit(String firstLine,
+                                              BufferedReader in, PrintWriter out) throws IOException{
+
+        // EXPECTED: MAP_PLAYER_PROFIT <jobId> <playerId> <expectedN>
+
+        String[] header = firstLine.trim().split("\\s+");
+        if (header.length != 4) {
+            out.println("ERROR bad MAP_PLAYER_PROFIT header. Expected: MAP_PLAYER_PROFIT <jobId> <playerId> <expectedN>");
+            out.println("END");
+            return;
+        }
+
+        String jobId = header[1].trim();
+        String playerId = header[2].trim();
+
+        if (jobId.isBlank()) {
+            out.println("ERROR MAP_PLAYER_PROFIT jobId is empty");
+            out.println("END");
+            return;
+        }
+
+        if (playerId.isBlank()) {
+            out.println("ERROR MAP_PLAYER_PROFIT playerId is empty");
+            out.println("END");
+            return;
+        }
+
+        int expectedN;
+        try {
+            expectedN = Integer.parseInt(header[3].trim());
+        } catch (NumberFormatException e) {
+            out.println("ERROR MAP_PLAYER_PROFIT expectedN must be an integer");
+            out.println("END");
+            return;
+        }
+
+        if (expectedN <= 0) {
+            out.println("ERROR MAP_PLAYER_PROFIT expectedN must be > 0");
+            out.println("END");
+            return;
+        }
+
+        List<String> partialLines = new ArrayList<>();
+        String line;
+        while ((line = in.readLine()) != null) {
+            line = line.trim();
+            if ("END".equals(line)) break;
+            if (!line.isEmpty()) partialLines.add(line);
+        }
+
+        PlayerProfitJob job;
+        synchronized (JOBS_LOCK) {
+            job = playerJobs.get(jobId);
+            if (job == null) {
+                job = new PlayerProfitJob(jobId, playerId, expectedN, MASTER_HOST, MASTER_CALLBACK_PORT);
+                playerJobs.put(jobId, job);
+                JOBS_LOCK.notifyAll();
+            }
+        }
+
+        job.addPartialResults(partialLines);
+        out.println("ACK");
+    }
 }

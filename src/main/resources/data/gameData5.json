@@ -1,0 +1,11 @@
+{
+  "GameName":"farao",
+  "ProviderName": "PlayNGo",
+  "Stars": 5,
+  "NoOfVotes": 252,
+  "GameLogo": "/usr/bin/images/gameLogo.png",
+  "MinBet": 20,
+  "MaxBet":150,
+  "RiskLevel": "low",
+  "HashKey": "farao"
+}

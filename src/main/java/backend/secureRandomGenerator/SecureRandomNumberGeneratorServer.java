@@ -34,6 +34,8 @@ public class SecureRandomNumberGeneratorServer {
 
     public static void main(String[] args) {
 
+        System.out.println("[SRNG] Is on!");
+
         // Establish TCP connection with multiple workers
         try (ServerSocket serverSocket = new ServerSocket(randomGeneratorPort)) {
 

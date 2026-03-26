@@ -10,6 +10,7 @@ import java.util.Scanner;
 
 public class ManagerConsoleApp {
 
+
     public static void main(String[] args) {
 
         String masterHost =  "localhost";
@@ -47,7 +48,6 @@ public class ManagerConsoleApp {
                 System.out.println("5. Show total Profit/Loss for specific provider");
                 System.out.println("6. Show total Profit/Loss for specific player");
                 System.out.println("7. Show all games");
-                System.out.println("8. Show total Profit/Loss for all games");
                 System.out.println("0. EXIT");
 
                 choice = scanner.nextLine().trim();
@@ -99,18 +99,15 @@ public class ManagerConsoleApp {
                         break;
                     }
                     case "5": {
-                        // 1. Show profit damages per provider
-                        System.out.println("Give ProviderName: ");
-                        String providerName = scanner.nextLine().trim();
-
-                        // 2. Send the request to MasterServer
-                        output.println("FIND_PROVIDER_PROFIT_LOSS "+ providerName);
-
-                        // 3. Show the received from MasterServer, result
-                        readMsgUntilEnd(input);
+                        // case: Show profit/loss for specific provider
+                        requestSpecificProviderProfitLoss(scanner,input,output);
                         break;
 
-
+                    }
+                    case "6":{
+                        //case: Show profit/loss for specific player (using player id)
+                        requestSpecificPlayerProfitLoss(scanner,input,output);
+                        break;
                     }
                     case "7": {
                         System.out.println("Printing all existing games...");
@@ -199,8 +196,29 @@ public class ManagerConsoleApp {
         readMsgUntilEnd(input);
     }
 
+    private static void requestSpecificProviderProfitLoss(Scanner scanner, BufferedReader input, PrintWriter output) throws Exception {
+        // 1. Show profit damages per provider
+        System.out.println("Give ProviderName: ");
+        String providerName = scanner.nextLine().trim();
 
-    // helper method for multilines responses
+        // 2. Send the request to MasterServer
+        output.println("FIND_PROVIDER_PROFIT_LOSS "+ providerName);
+
+        // 3. Show the received from MasterServer, result
+        readMsgUntilEnd(input);
+    }
+
+
+    private static void requestSpecificPlayerProfitLoss(Scanner scanner, BufferedReader input, PrintWriter output) throws Exception {
+        System.out.println("Give player id: ");
+        String playerId = scanner.nextLine().trim();
+
+        output.println("FIND_PLAYER_PROFIT_LOSS "+ playerId);
+
+        readMsgUntilEnd(input);
+    }
+
+    // helper method for multi-lines responses
     private static void readMsgUntilEnd(BufferedReader input) throws Exception{
         String line;
         while((line = input.readLine())!=null){

@@ -174,7 +174,12 @@ public class MasterServer {
         }else if(inputString.startsWith("FIND_PROVIDER_PROFIT_LOSS ")){
             handleFindSpecifProviderProfitLossRequest(inputString,output);
             return;
-        } else if (inputString.startsWith("MAKE_VISIBLE ")) {
+        }
+        else if(inputString.startsWith("FIND_PLAYER_PROFIT_LOSS ")){
+            handleFindSpecificPlayerProfitLossRequest(inputString,output);
+            return;
+        }
+        else if (inputString.startsWith("MAKE_VISIBLE ")) {
             handleMakeGameVisibleAgain(inputString,output);
             return;
         }
@@ -217,6 +222,11 @@ public class MasterServer {
             handlePlayerViewBalanceRequest(inputString,output);
             return;
         }
+        /*
+        else if (inputString.startsWith("CAN_USER_PLAY ")) {
+            handleCanUserPlayRequest(inputString,output);
+            return;
+        }*/
         output.println("ERROR unknown player command");
         output.println("END");
     }
@@ -374,6 +384,18 @@ public class MasterServer {
         gatherProviderProfit(providerName, reducerHost, reducerPort, output);
     }
 
+    private static void handleFindSpecificPlayerProfitLossRequest(String inputString,PrintWriter output){
+        String userId = inputString.substring("FIND_PLAYER_PROFIT_LOSS ".length()).trim();
+
+        if(userId.isBlank()){
+            output.println("ERROR, UserId is required!");
+            output.println("END");
+            return;
+        }
+
+        gatherPlayerProfit(userId,reducerHost,reducerPort,output);
+    }
+
     private static void handleShowAllGamesRequest(String inputString, PrintWriter output){
         String workerResponse  = gatherAllGamesFromWorkers(inputString);
 
@@ -436,7 +458,7 @@ public class MasterServer {
     }
 
 
-    private static void gatherProviderProfit(String providerName, String reducerHost, int reducerPost, PrintWriter output){
+    private static void gatherProviderProfit(String providerName, String reducerHost, int reducerPort, PrintWriter output){
 
         // jobId tag so the Reducer can separate this specific request from other request that run at the same time in him
         String jobId = UUID.randomUUID().toString();
@@ -446,7 +468,7 @@ public class MasterServer {
 
         // 1. Map: ask all workers to send partials to reducer
         for(Worker worker: workers){
-            forwardMsgToWorker(worker, "MAP_PROVIDER_PROFIT "+jobId +"|" + providerName +"|" +reducerHost +"|"+reducerPost+"|"+ expectedWorkers);
+            forwardMsgToWorker(worker, "MAP_PROVIDER_PROFIT "+jobId +"|" + providerName +"|" +reducerHost +"|"+reducerPort+"|"+ expectedWorkers);
         }
 
         // 2. Wait for reducer to push REDUCE_RESULT back here (here to MasterServer)
@@ -465,7 +487,7 @@ public class MasterServer {
             finalJson = pendingReduceResults.remove(key);
         }
         if (finalJson == null){
-            output.println("ERROR: No reduce result!");
+            output.println("ERROR: No reduce result for finding provider profit!");
             output.println("END");
             return;
         }
@@ -473,6 +495,36 @@ public class MasterServer {
         output.println("END");
     }
 
+    private static void gatherPlayerProfit(String userId, String reducerHost, int reducerPort, PrintWriter output){
+        String jobId = UUID.randomUUID().toString();
+
+        int expectedWorkers = workers.size();
+        for(Worker worker: workers){
+            forwardMsgToWorker(worker, "MAP_PLAYER_PROFIT "+ jobId+"|"+userId+"|"+reducerHost+"|"+reducerPort+"|"+expectedWorkers);
+        }
+
+        String key= "PLAYER_PROFIT|"+ jobId;
+        String finalJson;
+        synchronized (reduceLock){
+            while(!pendingReduceResults.containsKey(key)) {
+                try {
+                    reduceLock.wait();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            finalJson = pendingReduceResults.remove(key);
+        }
+        if (finalJson == null){
+            output.println("ERROR: No reduce result for finding player profit!");
+            output.println("END");
+            return;
+        }
+        output.println(finalJson); //JSON includes per-game + Total
+        output.println("END");
+
+    }
 
     // --- Helping Methods for Player Logic --- //
     // Fetch all available games
@@ -814,7 +866,7 @@ public class MasterServer {
         output.println("END");
     }
 
-
+    // Player viewBalance() method implementation:
     private static void handlePlayerViewBalanceRequest(String inputString, PrintWriter output){
         String userId = inputString.substring("VIEW_BALANCE ".length()).trim().toLowerCase();
 
@@ -833,6 +885,29 @@ public class MasterServer {
         output.println("User: "+userId+" Balance: "+ playerBalance.getBalance());
         output.println("END");
     }
+
+    /*
+    private static void handleCanUserPlayRequest(String inputString, PrintWriter output){
+
+        // "CAN_USER_PLAY "+playerId+"|"+gameName;
+        String payload = inputString.substring("CAN_USER_PLAY ".length()).trim();
+        String[] parts = payload.split("\\|");
+
+        String userId = parts[1].trim().toLowerCase();
+        if (userId.isBlank()){
+            output.println("Error, userId is Empty!");
+            output.println("END");
+            return;
+        }
+        String gameName = parts[2].trim().toLowerCase();
+        if(gameName.isBlank()){
+            output.println("Error, gameName is Empty!");
+            output.println("END");
+            return;
+        }
+        // Send the request to Worker so he will send back the min bet
+        Worker worker = chooseWorker(worker, "FIND_MIN_")
+    }*/
 
     // ------------------------------------------------------------------------------  //
     // ------------------------------------------------------------------------------  //
@@ -890,10 +965,65 @@ public class MasterServer {
                 return;
             }
 
+            if (header.startsWith("REDUCE_PROVIDER_PROFIT_RESULT ")) {
+                String payload = header.substring("REDUCE_PROVIDER_PROFIT_RESULT ".length()).trim();
+                String[] parts = payload.split("\\|");
+
+                if (parts.length != 2) {
+                    output.println("ERROR bad REDUCE_PROVIDER_PROFIT_RESULT header");
+                    return;
+                }
+
+                String jobId = parts[0].trim();
+                String providerName = parts[1].trim(); // optional, useful for debug
+                String key = "PROVIDER_PROFIT|" + jobId;
+
+                synchronized (reduceLock) {
+                    pendingReduceResults.put(key, stringBuilder.toString().trim());
+                    reduceLock.notifyAll();
+                }
+
+                System.out.println("[MasterServer] Got provider profit reduce result for provider="
+                        + providerName + " jobId=" + jobId);
+
+                output.println("ACK");
+                return;
+            }
+
+
+            if (header.startsWith("REDUCE_PLAYER_PROFIT_RESULT ")) {
+                String payload = header.substring("REDUCE_PLAYER_PROFIT_RESULT ".length()).trim();
+                String[] parts = payload.split("\\|");
+
+                if (parts.length != 2) {
+                    output.println("ERROR bad REDUCE_PLAYER_PROFIT_RESULT header");
+                    return;
+                }
+
+                String jobId = parts[0].trim();
+                String playerId = parts[1].trim();
+                String key = "PLAYER_PROFIT|" + jobId;
+
+                synchronized (reduceLock) {
+                    pendingReduceResults.put(key, stringBuilder.toString().trim());
+                    reduceLock.notifyAll();
+                }
+
+                System.out.println("[MasterServer] Got player profit reduce result for player="
+                        + playerId + " jobId=" + jobId);
+
+                output.println("ACK");
+                return;
+            }
+
+
             output.println("ERROR unknown reducer push: " + header);
 
 
-        }catch (Exception ignored){}
+
+        }catch (Exception e){
+            System.out.println("[MasterServer] handleReducerPush failed: " + e.getMessage());
+        }
 
     }
 

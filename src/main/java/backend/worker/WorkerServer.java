@@ -12,7 +12,9 @@ import java.io.PrintWriter;
 import java.math.BigDecimal;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class WorkerServer {
@@ -84,6 +86,9 @@ public class WorkerServer {
                 return;
             } else if (inputString.startsWith("MAP_PROVIDER_PROFIT ")){
                 handleProviderProfit(inputString, port,output);
+                return;
+            } else if (inputString.startsWith("MAP_PLAYER_PROFIT ")) {
+                handlePlayerProfit(inputString,port,output);
                 return;
             } else if (inputString.startsWith("MAP_SEARCH ")) {
                 handleMapSearch(inputString,port,output);
@@ -319,7 +324,7 @@ public class WorkerServer {
         String[] parts = payload.split("\\|");
 
         if(parts.length!=5){
-            output.println("ERROR bad format. Expected jobId|minStars|betCategory|risk|reducerHost|reducerPost|expectedN");
+            output.println("ERROR bad format. Expected jobId|providerName|reducerHost|reducerPost|expectedN");
             output.println("END");
             return;
         }
@@ -361,6 +366,60 @@ public class WorkerServer {
 
     }
 
+    private static void handlePlayerProfit(String inputString, int port, PrintWriter output){
+        //+userId +"|" + userId +"|" +reducerHost +"|"+reducerPost+"|"+ expectedWorkers
+
+        String payload = inputString.substring("MAP_PLAYER_PROFIT ".length()).trim();
+        String[] parts = payload.split("\\|");
+
+        if(parts.length != 5){
+            output.println("ERROR bad format. Expected jobId|userId|reducerHost|reducerPost|expectedN");
+            output.println("END");
+            return;
+        }
+        String jobId = parts[0].trim();
+        String userId = parts[1].trim();
+        String reducerHost = parts[2].trim();
+        int reducerPort = Integer.parseInt(parts[3].trim());
+        int expectedN = Integer.parseInt(parts[4].trim());
+
+        // Connect to reducer
+        try(Socket s = new Socket(reducerHost, reducerPort);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(s.getInputStream()));
+            PrintWriter writer = new PrintWriter(s.getOutputStream(), true))
+        {
+            writer.println("MAP_PLAYER_PROFIT "+ jobId +" "+userId + " "+ expectedN);
+
+            List<GameState> snapshot;
+            synchronized (gamesByName) {
+                snapshot = new ArrayList<>(gamesByName.values());
+            }
+
+            for(GameState gameState : snapshot){
+
+                for(BetRecord br : gameState.getBetHistorySnapshot()){
+                    if(br.getPlayerId().equalsIgnoreCase(userId)){
+                        BigDecimal playerDelta = br.getPayout().subtract(br.getBet());
+                        writer.println(playerDelta);
+                    }
+                }
+
+            }
+
+
+            writer.println("END");
+
+            String ack = reader.readLine();
+            System.out.println("[Worker "+port+"] Reducer replied: "+ack);
+
+            output.println("OK Worker ("+port+") MAP_PLAYER_PROFIT sent to REDUCER");
+            output.println("END");
+
+        }catch (Exception e){
+            output.println("ERROR: MAP_PLAYER_PROFIT failed: "+e.getMessage());
+            output.println("END");
+        }
+    }
 
 
     private static void handleMapSearch(String inputString, int port, PrintWriter output){

@@ -1,0 +1,11 @@
+{
+  "GameName":"Roulette",
+  "ProviderName": "PlayNGo",
+  "Stars": 1,
+  "NoOfVotes": 2,
+  "GameLogo": "/usr/bin/images/gameLogo.png",
+  "MinBet": 0.1,
+  "MaxBet":12,
+  "RiskLevel": "high",
+  "HashKey": "gamotinmanas"
+}
