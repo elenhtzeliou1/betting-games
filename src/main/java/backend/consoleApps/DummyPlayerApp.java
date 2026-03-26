@@ -349,7 +349,7 @@ public class DummyPlayerApp {
 
             if(ln.startsWith("GAME|")){
                 String[] parts = ln.split("\\|");
-                if(parts.length ==8){
+                if(parts.length ==9){
                     //correct line
                     SearchResult result = new SearchResult(
                             parts[1].trim(), // gameName
@@ -358,7 +358,8 @@ public class DummyPlayerApp {
                             parts[4].trim(), // betCategory
                             parts[5].trim(), // risk
                             parts[6].trim(), // minBet
-                            parts[7].trim()  // maxBet
+                            parts[7].trim(),  // maxBet
+                            parts[8].trim()
                     );
                     results.add(result);
                 }else{

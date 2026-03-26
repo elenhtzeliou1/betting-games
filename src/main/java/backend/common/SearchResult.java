@@ -9,6 +9,7 @@ public class SearchResult {
     private final String risk;
     private final String minBet;
     private final String maxBet;
+    private final String jackpot;
 
     public SearchResult(String gameName,
                         String providerName,
@@ -16,7 +17,8 @@ public class SearchResult {
                         String betCategory,
                         String risk,
                         String minBet,
-                        String maxBet) {
+                        String maxBet,
+                        String jackpot) {
         this.gameName = gameName;
         this.providerName = providerName;
         this.stars = stars;
@@ -24,6 +26,7 @@ public class SearchResult {
         this.risk = risk;
         this.minBet = minBet;
         this.maxBet = maxBet;
+        this.jackpot = jackpot;
     }
 
     public String getGameName() { return gameName; }
@@ -33,6 +36,7 @@ public class SearchResult {
     public String getRisk() { return risk; }
     public String getMinBet() { return minBet; }
     public String getMaxBet() { return maxBet; }
+    public String getJackpot(){return jackpot;}
 
     @Override
     public String toString() {
@@ -42,7 +46,8 @@ public class SearchResult {
                 " | BetCategory: " + betCategory +
                 " | Risk: " + risk +
                 " | MinBet: " + minBet +
-                " | MaxBet: " + maxBet;
+                " | MaxBet: " + maxBet +
+                " | Jackpot: "+ jackpot;
     }
 
 

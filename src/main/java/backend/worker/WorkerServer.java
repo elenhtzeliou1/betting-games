@@ -93,17 +93,17 @@ public class WorkerServer {
             } else if (inputString.startsWith("MAP_SEARCH ")) {
                 handleMapSearch(inputString,port,output);
                 return;
-            } else if(inputString.startsWith("RATE ")){
+            }else if(inputString.startsWith("SHOW_GAME_PROFIT_LOSS ")){
+                handleFindSpecificGameProfitLoss(inputString,output);
+                return;
+            }
+            else if(inputString.startsWith("RATE ")){
                 handleGameRate(inputString,output);
                 return;
             }else if(inputString.startsWith("PLAY ")){
                 handlePlayRequest(inputString,output);
                 return;
             }
-
-            // continue with other else if
-            //
-            //
 
             output.println("ERROR unknown worker command: " + inputString);
             output.println("END");
@@ -175,10 +175,12 @@ public class WorkerServer {
         synchronized (gamesByName) {
             for (Map.Entry<String, GameState> val : gamesByName.entrySet()){
                 GameState gameState = val.getValue();
+                BigDecimal jackpot = getJackpotForSpecificRiskLevel(gameState.getGame().getRiskLevel());
                 output.println("GameName: "+gameState.getGame().getGameName() +
                         " | Provider: " + gameState.getGame().getProviderName()+
                         " | BetCategory: "+ gameState.getGame().getBetCategory() +
                         " | Risk: " + gameState.getGame().getRiskLevel() +
+                        " | Jackpot: "+ jackpot +
                         " | isGameActive: "+ gameState.isActive()
                 );
 
@@ -421,6 +423,32 @@ public class WorkerServer {
         }
     }
 
+    private static void handleFindSpecificGameProfitLoss(String inputString, PrintWriter output){
+        String gameName  = inputString.substring("SHOW_GAME_PROFIT_LOSS ".length()).trim();
+        if(gameName.isBlank()){
+            output.println("Error, gameName is empty! ");
+            output.println("END");
+            return;
+        }
+
+        GameState gameState;
+        synchronized (gamesByName){
+            gameState = gamesByName.get(gameName);
+        }
+
+        if(gameState==null){
+            output.println("ERROR! No game found with gameName: "+ gameName);
+            output.println("END");
+            return;
+        }
+        BigDecimal totalProfitLoss = gameState.getTotalLossProfit();
+
+        output.println("GAME_PROFIT_LOSS|"+gameState.getGame().getGameName()+"|"
+        +gameState.getGame().getProviderName()+"|"+
+                totalProfitLoss);
+
+        output.println("END");
+    }
 
     private static void handleMapSearch(String inputString, int port, PrintWriter output){
         String payload = inputString.substring("MAP_SEARCH ".length()).trim();
@@ -476,9 +504,16 @@ public class WorkerServer {
                     //
                     // Wire format (one line per game):
                     //   GAME|gameName|provider|stars|betCategory|risk|minBet|maxBet
+                    BigDecimal jackpot = getJackpotForSpecificRiskLevel(game.getRiskLevel());
                     writer.println(
-                            "GAME|" + game.getGameName() + "|" + game.getProviderName() + "|" + game.getStars() + "|" +
-                                    game.getBetCategory() + "|" + gameRisk + "|" + game.getMinBet() + "|" + game.getMaxBet()
+                            "GAME|" + game.getGameName() + "|"
+                                    + game.getProviderName() + "|"
+                                    + game.getStars() + "|"
+                                    + game.getBetCategory() + "|"
+                                    + gameRisk + "|"
+                                    + game.getMinBet() + "|"
+                                    + game.getMaxBet() + "|"
+                                    + jackpot
                     );
                 }
             }
@@ -741,5 +776,15 @@ public class WorkerServer {
 
         }
 
+    }
+
+
+    private static BigDecimal getJackpotForSpecificRiskLevel(RiskLevel riskLevel){
+        return switch (riskLevel) {
+            case LOW -> BigDecimal.valueOf(10);
+            case MEDIUM -> BigDecimal.valueOf(20);
+            case HIGH -> BigDecimal.valueOf(40);
+            default -> throw new IllegalArgumentException("Unknown risk level: " + riskLevel);
+        };
     }
 }

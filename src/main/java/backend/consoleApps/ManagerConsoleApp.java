@@ -47,7 +47,8 @@ public class ManagerConsoleApp {
                 System.out.println("4. Update game Risk");
                 System.out.println("5. Show total Profit/Loss for specific provider");
                 System.out.println("6. Show total Profit/Loss for specific player");
-                System.out.println("7. Show all games");
+                System.out.println("7. Show total Profit/Loss for specific game");
+                System.out.println("8. Show all games");
                 System.out.println("0. EXIT");
 
                 choice = scanner.nextLine().trim();
@@ -109,7 +110,12 @@ public class ManagerConsoleApp {
                         requestSpecificPlayerProfitLoss(scanner,input,output);
                         break;
                     }
-                    case "7": {
+                    case "7":{
+                        //case: show profit/loss for specif game
+                        requestSpecificGameProfitLoss(scanner,input,output);
+                        break;
+                    }
+                    case "8": {
                         System.out.println("Printing all existing games...");
                         output.println("SHOW_ALL_GAMES ");
                         readMsgUntilEnd(input);
@@ -208,7 +214,6 @@ public class ManagerConsoleApp {
         readMsgUntilEnd(input);
     }
 
-
     private static void requestSpecificPlayerProfitLoss(Scanner scanner, BufferedReader input, PrintWriter output) throws Exception {
         System.out.println("Give player id: ");
         String playerId = scanner.nextLine().trim();
@@ -218,6 +223,14 @@ public class ManagerConsoleApp {
         readMsgUntilEnd(input);
     }
 
+    private static void requestSpecificGameProfitLoss(Scanner scanner, BufferedReader input, PrintWriter output) throws Exception {
+        System.out.println("Give gameName to see profitLoss: ");
+        String gameName  = scanner.nextLine().trim();
+
+        output.println("SHOW_GAME_PROFIT_LOSS "+gameName);
+
+        readMsgUntilEnd(input);
+    }
     // helper method for multi-lines responses
     private static void readMsgUntilEnd(BufferedReader input) throws Exception{
         String line;

@@ -179,11 +179,14 @@ public class MasterServer {
             handleFindSpecificPlayerProfitLossRequest(inputString,output);
             return;
         }
+        else if (inputString.startsWith("SHOW_GAME_PROFIT_LOSS ")){
+            handleFindSpecificGameProfitLossRequest(inputString,output);
+            return;
+        }
         else if (inputString.startsWith("MAKE_VISIBLE ")) {
             handleMakeGameVisibleAgain(inputString,output);
             return;
         }
-        // complete with more manager requests
 
 
         output.println("ERROR unknown manager command");
@@ -230,7 +233,6 @@ public class MasterServer {
         output.println("ERROR unknown player command");
         output.println("END");
     }
-
 
 
     // Handle Manager Requests (Helping Methods)
@@ -394,6 +396,25 @@ public class MasterServer {
         }
 
         gatherPlayerProfit(userId,reducerHost,reducerPort,output);
+    }
+
+
+    private static void handleFindSpecificGameProfitLossRequest(String inputString, PrintWriter output){
+        String gameName = inputString.substring("SHOW_GAME_PROFIT_LOSS ".length()).trim();
+        if(gameName.isBlank()){
+            output.println("Error, GameName required!");
+            output.println("END");
+            return;
+        }
+        Worker worker = chooseWorker(gameName);
+
+        String workerResponse = forwardMsgToWorker(worker, "SHOW_GAME_PROFIT_LOSS "+gameName);
+
+        for (String ln : workerResponse.split("\n")) {
+            if (!ln.isBlank()) output.println(ln);
+        }
+        output.println("END");
+
     }
 
     private static void handleShowAllGamesRequest(String inputString, PrintWriter output){
