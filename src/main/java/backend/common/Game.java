@@ -12,16 +12,25 @@ public class Game {
     private double starsSum; //counter for totalStars
 
     private String gameLogo;
-    private final BigDecimal minBet;
-    private final BigDecimal maxBet;
+    private BigDecimal minBet;
+    private BigDecimal maxBet;
 
     private RiskLevel riskLevel; // can change by manager
     private final String hashKey;
-    private final String betCategory; // "$" or "$$" or "$$$"
+    private String betCategory; // "$" or "$$" or "$$$"
 
 
-    public Game(String gameName,String providerName, double stars, int noOfVotes, String gameLogo,
-                BigDecimal minBet,BigDecimal maxBet, RiskLevel riskLevel, String hashKey){
+    public Game(
+            String gameName,
+            String providerName,
+            double stars,
+            int noOfVotes,
+            String gameLogo,
+            BigDecimal minBet,
+            BigDecimal maxBet,
+            RiskLevel riskLevel,
+            String hashKey
+    ){
         this.gameName = gameName;
         this.providerName = providerName;
         this.stars = stars;
@@ -32,7 +41,6 @@ public class Game {
         this.riskLevel = riskLevel;
         this.hashKey = hashKey;
         this.betCategory = calculateBetCategory(minBet);
-
         this.starsSum = noOfVotes * stars;
     }
 
@@ -90,7 +98,6 @@ public class Game {
         this.stars = this.starsSum/this.noOfVotes
         ;
     }
-
     public void decreaseNoOfVotes(){this.noOfVotes--;}
     public void decreaseStarsSum(int stars) {
         if (this.noOfVotes >0){
@@ -98,17 +105,29 @@ public class Game {
         }
 
     }
-
-
     private static String calculateBetCategory(BigDecimal minBet){
         if (minBet.compareTo(new BigDecimal("5"))>=0) return "$$$";
         if(minBet.compareTo(new BigDecimal("1"))>=0) return "$$";
         return "$";
     }
-
     public String getBetCategory(){
         return this.betCategory;
     }
 
+    public void setMinBet(BigDecimal minBet){
+        this.minBet = minBet;
+        this.betCategory = calculateBetCategory(minBet);
+    }
+    public void setMaxBet(BigDecimal maxBet){
+        this.maxBet = maxBet;
+    }
+    public void setBetCategory(String betCategory){
+        this.betCategory = betCategory;
+    }
+    public void updateBetLimits(BigDecimal minBet, BigDecimal maxBet) {
+        this.minBet = minBet;
+        this.maxBet = maxBet;
+        this.betCategory = calculateBetCategory(minBet);
+    }
 
 }

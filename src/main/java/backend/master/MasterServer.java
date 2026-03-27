@@ -163,8 +163,8 @@ public class MasterServer {
             // Use Reducer (To avoid duplicates if we implement active replication)
             handleShowAllGamesRequest(inputString, output);
             return;
-        } else if (inputString.startsWith("UPDATE_GAME_RISK ")) {
-            handleUpdateRiskRequest(inputString,output);
+        } else if (inputString.startsWith("MODIFY_GAME ")) {
+            handleModifyGameRequest(inputString,output);
             return;
             
         }else if(inputString.startsWith("DELETE_EXISTING_GAME ")){
@@ -303,11 +303,11 @@ public class MasterServer {
         output.println("END");
     }
 
-    private static void handleUpdateRiskRequest(String inputString, PrintWriter output){
-        String payload = inputString.substring("UPDATE_GAME_RISK ".length()).trim();
+    private static void handleModifyGameRequest(String inputString, PrintWriter output){
+        String payload = inputString.substring("MODIFY_GAME ".length()).trim();
 
         String[] parts = payload.split("\\|");
-        if(parts.length !=3){
+        if(parts.length !=5){
             output.println("Error, bad format: Expected: gameName|providerName|risk(low||medium||high)");
             output.println("END");
             return;
@@ -315,24 +315,81 @@ public class MasterServer {
         String gameName = parts[0].trim();
         String providerName = parts[1].trim();
         String riskLevelStr = parts[2].trim();
+        String minBetStr = parts[3].trim();
+        String maxBetStr = parts[4].trim();
+
+        if(gameName.isBlank()){
+            output.println("Error, gameName is required");
+            output.println("END");
+            return;
+        }
+        if(providerName.isBlank()){
+            output.println("Error, providerName is required");
+            output.println("END");
+            return;
+        }
 
         // Validation check for riskLevel input
         // Doing the validation here provides faster reply to manager
         // This validation can also happen only to worker
 
-        try{
-            RiskLevel.parse(riskLevelStr);
-        }catch (Exception e){
-            output.println("ERROR invalid riskString. Allowed: low || medium || high");
-            output.println("END");
-            return;
+        if(!riskLevelStr.equalsIgnoreCase("KEEP")){
+            try{
+                RiskLevel.parse(riskLevelStr);
+            }catch (Exception e){
+                output.println("ERROR invalid riskString. Allowed: low || medium || high");
+                output.println("END");
+                return;
+            }
+        }
+
+        if(!minBetStr.equalsIgnoreCase("KEEP")) {
+            try {
+                BigDecimal minBet = new BigDecimal(minBetStr);
+                if(minBet.compareTo(BigDecimal.ZERO) <=0){
+                    output.println("Error, min bet must be > 0");
+                    output.println("END");
+                    return;
+                }
+
+            } catch (Exception e) {
+                output.println("ERROR minBet must be a valid decimal number or KEEP");
+                output.println("END");
+                return;
+            }
+        }
+        if (!maxBetStr.equalsIgnoreCase("KEEP")) {
+            try {
+                BigDecimal maxBet = new BigDecimal(maxBetStr);
+                if (maxBet.compareTo(BigDecimal.ZERO) <= 0) {
+                    output.println("ERROR maxBet must be > 0");
+                    output.println("END");
+                    return;
+                }
+            } catch (Exception e) {
+                output.println("ERROR maxBet must be a valid decimal number or KEEP");
+                output.println("END");
+                return;
+            }
+        }
+        if (!minBetStr.equalsIgnoreCase("KEEP") && !maxBetStr.equalsIgnoreCase("KEEP")) {
+            BigDecimal minBet = new BigDecimal(minBetStr);
+            BigDecimal maxBet = new BigDecimal(maxBetStr);
+            if (maxBet.compareTo(minBet) < 0) {
+                output.println("ERROR maxBet must be >= minBet");
+                output.println("END");
+                return;
+            }
         }
 
         // Send it to its worker (it's owner)
         Worker worker = chooseWorker(gameName);
 
         // Take the worker's response
-        String workerResponse = forwardMsgToWorker(worker, "UPDATE_GAME_RISK "+ gameName+"|"+providerName+"|"+riskLevelStr);
+        String workerResponse = forwardMsgToWorker(
+                worker,
+                "MODIFY_GAME " + gameName + "|" + providerName + "|" + riskLevelStr + "|" + minBetStr + "|" + maxBetStr
+        );
 
         // Send the response to Manager
         for(String ln: workerResponse.split("\n")){
@@ -821,6 +878,7 @@ public class MasterServer {
         if (parts.length !=3){
             output.println("ERROR bad RATE format. Expected: playerId|gameName|stars");
             output.println("END");
+            return;
         }
         String playerId = parts[0].trim();
         String gameName = parts[1].trim();

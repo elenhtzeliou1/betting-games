@@ -75,8 +75,8 @@ public class WorkerServer {
             }else if(inputString.startsWith("SHOW_ALL_GAMES")){
                 handleShowAllGames(output);
                 return;
-            }else if(inputString.startsWith("UPDATE_GAME_RISK ")){
-                handleUpdateGameRisk(inputString,output);
+            }else if(inputString.startsWith("MODIFY_GAME ")){
+                handleModifyGame(inputString,output);
                 return;
             } else if (inputString.startsWith("DELETE_EXISTING_GAME ")) {
                 handleSetGameVisibilityInactive(inputString,output);
@@ -176,67 +176,121 @@ public class WorkerServer {
             for (Map.Entry<String, GameState> val : gamesByName.entrySet()){
                 GameState gameState = val.getValue();
                 BigDecimal jackpot = getJackpotForSpecificRiskLevel(gameState.getGame().getRiskLevel());
-                output.println("GameName: "+gameState.getGame().getGameName() +
-                        " | Provider: " + gameState.getGame().getProviderName()+
-                        " | BetCategory: "+ gameState.getGame().getBetCategory() +
-                        " | Risk: " + gameState.getGame().getRiskLevel() +
-                        " | Jackpot: "+ jackpot +
-                        " | isGameActive: "+ gameState.isActive()
+                Game game = gameState.getGame();
+                output.println("GameName: " + game.getGameName()
+                        + " | Provider: " + game.getProviderName()
+                        + " | MinBet: " + game.getMinBet()
+                        + " | MaxBet: " + game.getMaxBet()
+                        + " | BetCategory: " + game.getBetCategory()
+                        + " | Risk: " + game.getRiskLevel()
+                        + " | Jackpot: " + jackpot
+                        + " | isGameActive: " + gameState.isActive()
                 );
-
             }
         }
         output.println("END");
     }
 
-    private static void handleUpdateGameRisk(String inputString, PrintWriter output) {
-        String payload = inputString.substring("UPDATE_GAME_RISK ".length()).trim();
-        String[] parts = payload.split("\\|");
+    private static void handleModifyGame(String inputString, PrintWriter output) {
+        String payload = inputString.substring("MODIFY_GAME ".length()).trim();
+        String[] parts = payload.split("\\|",-1);
 
-        if(parts.length !=3){
-            output.println("Error, bad format: Expected: gameName|providerName|risk(low||medium||high)");
+        if (parts.length != 5) {
+            output.println("ERROR bad format. Expected: gameName|providerName|riskOrKEEP|minBetOrKEEP|maxBetOrKEEP");
             output.println("END");
             return;
         }
-        String gameName = parts[0].toLowerCase().trim();
+        String gameName = parts[0].trim().toLowerCase();
         String providerName = parts[1].trim();
         String riskLevelStr = parts[2].trim();
-
-        RiskLevel newRisk;
-        // Validation check for riskLevel input
-        // can be removed because it is also happen to MasterServer
-        try{
-            newRisk= RiskLevel.parse(riskLevelStr);
-        }catch (Exception e){
-            output.println("ERROR invalid riskString. Allowed: low || medium || high");
-            output.println("END");
-            return;
-        }
+        String minBetStr = parts[3].trim();
+        String maxBetStr = parts[4].trim();
 
         GameState gameState;
-        synchronized (gamesByName){
+        synchronized (gamesByName) {
             gameState = gamesByName.get(gameName);
         }
-        if (gameState == null){
-            // No Game Exist with this name
-            output.println("Error, no Game found with GameName: "+gameName);
+        if (gameState == null) {
+            output.println("ERROR no game found with GameName: " + gameName);
             output.println("END");
             return;
         }
-        synchronized (gameState){
-            // verify that given provider matches stored provider
-            String storedProvider = gameState.getGame().getProviderName();
-            if(!storedProvider.equalsIgnoreCase(providerName)){
-                // providerName mismatch
-                output.println("ERROR providerName mismatch for game: " +gameName);
-                output.println("Expected: "+storedProvider+", got: "+providerName);
+
+        synchronized (gameState) {
+            Game game = gameState.getGame();
+
+            String storedProvider = game.getProviderName();
+            if (!storedProvider.equalsIgnoreCase(providerName)) {
+                output.println("ERROR providerName mismatch for game: " + gameName);
+                output.println("Expected: " + storedProvider + ", got: " + providerName);
                 output.println("END");
                 return;
             }
-            gameState.getGame().setRiskLevel(newRisk);
+
+            RiskLevel finalRisk = game.getRiskLevel();
+            BigDecimal finalMinBet = game.getMinBet();
+            BigDecimal finalMaxBet = game.getMaxBet();
+
+            if (isKeepValue(riskLevelStr)) {
+                try {
+                    finalRisk = RiskLevel.parse(riskLevelStr);
+                } catch (Exception e) {
+                    output.println("ERROR invalid riskString. Allowed: low | medium | high | KEEP");
+                    output.println("END");
+                    return;
+                }
+            }
+
+            if (isKeepValue(minBetStr)) {
+                try {
+                    finalMinBet = new BigDecimal(minBetStr);
+                } catch (Exception e) {
+                    output.println("ERROR minBet must be a valid decimal number or KEEP");
+                    output.println("END");
+                    return;
+                }
+
+                if (finalMinBet.compareTo(BigDecimal.ZERO) <= 0) {
+                    output.println("ERROR minBet must be > 0");
+                    output.println("END");
+                    return;
+                }
+            }
+
+            if (isKeepValue(maxBetStr)) {
+                try {
+                    finalMaxBet = new BigDecimal(maxBetStr);
+                } catch (Exception e) {
+                    output.println("ERROR maxBet must be a valid decimal number or KEEP");
+                    output.println("END");
+                    return;
+                }
+
+                if (finalMaxBet.compareTo(BigDecimal.ZERO) <= 0) {
+                    output.println("ERROR maxBet must be > 0");
+                    output.println("END");
+                    return;
+                }
+            }
+
+            if (finalMaxBet.compareTo(finalMinBet) < 0) {
+                output.println("ERROR maxBet must be >= minBet");
+                output.println("END");
+                return;
+            }
+
+            game.setRiskLevel(finalRisk);
+            game.updateBetLimits(finalMinBet, finalMaxBet);
+
+            output.println("OK Game modified successfully");
+            output.println("GameName: " + game.getGameName());
+            output.println("Provider: " + game.getProviderName());
+            output.println("Risk: " + game.getRiskLevel());
+            output.println("MinBet: " + game.getMinBet());
+            output.println("MaxBet: " + game.getMaxBet());
+            output.println("BetCategory: " + game.getBetCategory());
+            output.println("END");
         }
-        output.println("RiskLevel Updated Successfully!");
-        output.println("END");
 
     }
     
@@ -611,6 +665,11 @@ public class WorkerServer {
             output.println("END");
             return;
         }
+        if (requestedBet.compareTo(BigDecimal.ZERO) <= 0) {
+            output.println("ERROR bet must be > 0");
+            output.println("END");
+            return;
+        }
 
         GameState gameState;
         synchronized (gamesByName){
@@ -778,7 +837,6 @@ public class WorkerServer {
 
     }
 
-
     private static BigDecimal getJackpotForSpecificRiskLevel(RiskLevel riskLevel){
         return switch (riskLevel) {
             case LOW -> BigDecimal.valueOf(10);
@@ -786,5 +844,19 @@ public class WorkerServer {
             case HIGH -> BigDecimal.valueOf(40);
             default -> throw new IllegalArgumentException("Unknown risk level: " + riskLevel);
         };
+    }
+
+    private static String deriveBetCategory(BigDecimal minBet) {
+        if (minBet.compareTo(BigDecimal.valueOf(5)) >= 0) {
+            return "$$$";
+        }
+        if (minBet.compareTo(BigDecimal.ONE) >= 0) {
+            return "$$";
+        }
+        return "$";
+    }
+
+    private static boolean isKeepValue(String value) {
+        return value != null && !value.isBlank() && !value.equalsIgnoreCase("KEEP");
     }
 }

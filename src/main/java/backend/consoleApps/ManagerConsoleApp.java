@@ -44,7 +44,7 @@ public class ManagerConsoleApp {
                 System.out.println("1. Add new Game");
                 System.out.println("2. Delete existing game");
                 System.out.println("3. Make an existing game visible again");
-                System.out.println("4. Update game Risk");
+                System.out.println("4. Modify existing game");
                 System.out.println("5. Show total Profit/Loss for specific provider");
                 System.out.println("6. Show total Profit/Loss for specific player");
                 System.out.println("7. Show total Profit/Loss for specific game");
@@ -59,7 +59,6 @@ public class ManagerConsoleApp {
                     readMsgUntilEnd(input);   // Master sends Bye bye + END
                     break;                    // exit the menu loop
                 }
-
 
                 switch(choice){
 
@@ -90,13 +89,12 @@ public class ManagerConsoleApp {
                         break;
                     }
                     case "4": {
-                        // Case: Update Risk Level of Specific Game
-
+                        // Case: Modify Specific Game, you can mody riskLevel, minBet and maxBet if wanted
                         // 1. show all games:
                         boolean noGames = showAllGamesOrReturnNoGames(input, output);
                         if (noGames) break; // go back to menu
 
-                        updateGameRisk(scanner,input,output);
+                        modifyGame(scanner,input,output);
                         break;
                     }
                     case "5": {
@@ -170,23 +168,27 @@ public class ManagerConsoleApp {
         readMsgUntilEnd(input);
     }
 
-    private static void updateGameRisk(Scanner scanner, BufferedReader input, PrintWriter output) throws Exception {
-        // 2. Ask user (manager) for GameName:
+    private static void modifyGame(Scanner scanner, BufferedReader input, PrintWriter output) throws Exception {
+
+        System.out.println("Modify Game. You can modify RiskLevel, MinBet and MaxBet");
+
         System.out.println("Give GameName: ");
         String gameName = scanner.nextLine().trim();
 
-        // 3. Ask user for the ProviderName
         System.out.println("Give ProviderName: ");
         String providerName = scanner.nextLine().trim();
 
-        // 4. Ask for the new RiskLevel
         System.out.println("Give new Risk Level: (low | medium | high)");
-        String riskLevel = scanner.nextLine().trim();
+        String riskLevel = normalizedOptionalField(scanner.nextLine());
 
-        // 5. Send the request to MasterServer
-        output.println("UPDATE_GAME_RISK " + gameName + "|" + providerName + "|" + riskLevel);
+        System.out.println("Give new minBet or press Enter to keep current: ");
+        String minBet = normalizedOptionalField(scanner.nextLine());
 
-        // 6. Show the Result
+        System.out.println("Give new maxBet or press Enter to keep current: ");
+        String maxBet = normalizedOptionalField(scanner.nextLine());
+
+        output.println("MODIFY_GAME " + gameName + "|" + providerName + "|" + riskLevel+"|"+minBet+"|"+maxBet);
+
         readMsgUntilEnd(input);
     }
 
@@ -269,4 +271,8 @@ public class ManagerConsoleApp {
         return false; // There are games Stored
     }
 
+    private static String normalizedOptionalField(String value){
+        value =value.trim();
+        return value.isEmpty() ? "KEEP" : value;
+    }
 }
