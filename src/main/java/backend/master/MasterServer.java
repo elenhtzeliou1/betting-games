@@ -13,6 +13,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.*;
 
+
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 
@@ -45,28 +46,61 @@ public class MasterServer {
 
     public static void main(String[] args) {
         //Helping Message
-        if (args.length < 2) {
-            System.out.println("Usage: java MasterServer <masterPort> <WorkerHost:port> [workerHost:port] ... ");
-            System.out.println("Example: java MasterServer 5000 localhost:6001 localhost:6003");
+        if (args.length < 3) {
+            System.out.println("Usage: java backend.master.MasterServer <masterPort> <reducerHost:reducerPort> <workerHost:port> [workerHost:port] ...");
+            System.out.println("Example: java backend.master.MasterServer 5000 192.168.1.20:7000 localhost:6001 localhost:6002");
             return;
         }
 
-        int masterPort = Integer.parseInt(args[0]);
-
-        for(int i =1; i<args.length; i++){
-            String[] hostAndPort = args[i].split(":");
-            String host = hostAndPort[0];
-            int port = Integer.parseInt(hostAndPort[1]);
-            workers.add(new Worker(host,port));
+        int masterPort;
+        try {
+            masterPort = Integer.parseInt(args[0]);
+        } catch (NumberFormatException e) {
+            System.out.println("[MasterServer] Invalid masterPort: " + args[0]);
+            return;
         }
+
+        try {
+            String[] reducerParts = args[1].split(":");
+            if (reducerParts.length != 2) {
+                System.out.println("[MasterServer] Invalid reducer address. Expected reducerHost:reducerPort");
+                return;
+            }
+
+            reducerHost = reducerParts[0].trim();
+            reducerPort = Integer.parseInt(reducerParts[1].trim());
+        } catch (Exception e) {
+            System.out.println("[MasterServer] Invalid reducer configuration: " + e.getMessage());
+            return;
+        }
+
+        for(int i =2; i<args.length; i++){
+            try {
+                String[] hostAndPort = args[i].split(":");
+                if (hostAndPort.length != 2) {
+                    System.out.println("[MasterServer] Skipping invalid worker: " + args[i]);
+                    continue;
+                }
+
+                String host = hostAndPort[0].trim();
+                int port = Integer.parseInt(hostAndPort[1].trim());
+                workers.add(new Worker(host, port));
+            } catch (Exception e) {
+                System.out.println("[MasterServer] Skipping invalid worker '" + args[i] + "': " + e.getMessage());
+            }
+        }
+
+        if (workers.isEmpty()) {
+            System.out.println("[MasterServer] No valid workers configured.");
+            return;
+        }
+
         // Callback Port for reducer
         callbackPort = masterPort+1;
         new Thread(()-> startReducerCallbackServer(callbackPort)).start();
         System.out.println("[MasterServer] Reducer callback listening on port: "+callbackPort);
-
-        // Worker List:
-        System.out.println("[MasterServer] Workers: "+ workers);
-
+        System.out.println("[MasterServer] Reducer configured at: " + reducerHost + ":" + reducerPort);
+        System.out.println("[MasterServer] Workers: " + workers);
 
         try(ServerSocket serverSocket = new ServerSocket(masterPort)){
             System.out.println("[MasterServer] Listening on port: "+ masterPort);

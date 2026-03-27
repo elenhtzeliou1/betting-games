@@ -21,8 +21,8 @@ import java.util.*;
 public class ReducerServer {
 
     // Where reducer will push back its final results
-    private static final String MASTER_HOST = "localhost";
-    private static final int MASTER_CALLBACK_PORT = 5001;
+    private static String masterHost;
+    private static int masterCallBackPort;
 
     // In-memory jobs
     private static final Object JOBS_LOCK = new Object();
@@ -40,15 +40,24 @@ public class ReducerServer {
     * if no arg provider, by default the port is 7000
     * */
     public static void main(String[] args) {
+        if (args.length < 3) {
+            System.out.println("Usage: java backend.reducer.ReducerServer <reducerPort> <masterHost> <masterCallbackPort>");
+            System.out.println("Example: java backend.reducer.ReducerServer 7000 192.168.1.10 5001");
+            return;
+        }
         int port;
-        if(args.length ==1){
+        try {
             port = Integer.parseInt(args[0]);
-        }else{
-            port = 7000;
+            masterHost = args[1].trim();
+            masterCallbackPort = Integer.parseInt(args[2]);
+        } catch (Exception e) {
+            System.out.println("[ReducerServer] Invalid startup arguments: " + e.getMessage());
+            return;
         }
 
         try(ServerSocket serverSocket = new ServerSocket(port)){
             System.out.println("[ReducerServer] Listening on port: "+port);
+            System.out.println("[ReducerServer] Master callback target: " + masterHost + ":" + masterCallbackPort);
 
             // Accept connections forever.
             // Each connection is handle in its own thread (multi-threaded reducer)
@@ -163,7 +172,7 @@ public class ReducerServer {
         synchronized (JOBS_LOCK){
             job = searchJobs.get(jobId);
             if(job ==null){
-                job = new SearchJob(jobId,expectedN, MASTER_HOST, MASTER_CALLBACK_PORT);
+                job = new SearchJob(jobId,expectedN, masterHost, masterCallBackPort);
                 searchJobs.put(jobId,job);
 
                 // Notify any waiting GET_SEARCH threads that the job now exists.
@@ -238,7 +247,7 @@ public class ReducerServer {
         synchronized (JOBS_LOCK) {
             job = providerJobs.get(jobId);
             if (job == null) {
-                job = new ProviderProfitJob(jobId, providerName, expectedN, MASTER_HOST, MASTER_CALLBACK_PORT);
+                job = new ProviderProfitJob(jobId, providerName, expectedN, masterHost, masterCallBackPort);
                 providerJobs.put(jobId, job);
 
                 // Notify any waiting threads that this job now exists
@@ -308,7 +317,7 @@ public class ReducerServer {
         synchronized (JOBS_LOCK) {
             job = playerJobs.get(jobId);
             if (job == null) {
-                job = new PlayerProfitJob(jobId, playerId, expectedN, MASTER_HOST, MASTER_CALLBACK_PORT);
+                job = new PlayerProfitJob(jobId, playerId, expectedN, masterHost, masterCallBackPort);
                 playerJobs.put(jobId, job);
                 JOBS_LOCK.notifyAll();
             }
