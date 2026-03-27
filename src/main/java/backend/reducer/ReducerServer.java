@@ -22,7 +22,7 @@ public class ReducerServer {
 
     // Where reducer will push back its final results
     private static String masterHost;
-    private static int masterCallBackPort;
+    private static int masterCallbackPort;
 
     // In-memory jobs
     private static final Object JOBS_LOCK = new Object();
@@ -172,7 +172,7 @@ public class ReducerServer {
         synchronized (JOBS_LOCK){
             job = searchJobs.get(jobId);
             if(job ==null){
-                job = new SearchJob(jobId,expectedN, masterHost, masterCallBackPort);
+                job = new SearchJob(jobId,expectedN, masterHost, masterCallbackPort);
                 searchJobs.put(jobId,job);
 
                 // Notify any waiting GET_SEARCH threads that the job now exists.
@@ -247,7 +247,7 @@ public class ReducerServer {
         synchronized (JOBS_LOCK) {
             job = providerJobs.get(jobId);
             if (job == null) {
-                job = new ProviderProfitJob(jobId, providerName, expectedN, masterHost, masterCallBackPort);
+                job = new ProviderProfitJob(jobId, providerName, expectedN, masterHost, masterCallbackPort);
                 providerJobs.put(jobId, job);
 
                 // Notify any waiting threads that this job now exists
@@ -317,7 +317,7 @@ public class ReducerServer {
         synchronized (JOBS_LOCK) {
             job = playerJobs.get(jobId);
             if (job == null) {
-                job = new PlayerProfitJob(jobId, playerId, expectedN, masterHost, masterCallBackPort);
+                job = new PlayerProfitJob(jobId, playerId, expectedN, masterHost, masterCallbackPort);
                 playerJobs.put(jobId, job);
                 JOBS_LOCK.notifyAll();
             }
