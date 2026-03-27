@@ -7,7 +7,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.HashMap;
 import java.util.Map;
-
+import java.net.InetSocketAddress;
 
 // Handles Multiple Worker Request
 // Worker requests:
@@ -20,9 +20,8 @@ public class SecureRandomNumberGeneratorServer {
     // multithreaded tcp server
     // accepts many worker requests
 
-    // later change them 2 below to set the attributes via args
-    private static final int randomGeneratorPort = 8000;
-    private static final String randomGeneratorHost = "localhost";
+    private static int randomGeneratorPort;
+    private static String randomGeneratorHost;
 
     // Holds the Game Registrations
     // <GameName, RNGContext>
@@ -33,11 +32,26 @@ public class SecureRandomNumberGeneratorServer {
     private static final Map<String, RNGContext> games = new HashMap<>();
 
     public static void main(String[] args) {
+        if (args.length < 1 || args.length > 2) {
+            System.out.println("Usage: java backend.secureRandomGenerator.SecureRandomNumberGeneratorServer <port> [bindHost]");
+            System.out.println("Example: java backend.secureRandomGenerator.SecureRandomNumberGeneratorServer 8000 0.0.0.0");
+            return;
+        }
+
+        try {
+            randomGeneratorPort = Integer.parseInt(args[0].trim());
+            randomGeneratorHost = (args.length == 2) ? args[1].trim() : "0.0.0.0";
+        } catch (Exception e) {
+            System.out.println("[SRNG] Invalid startup arguments: " + e.getMessage());
+            return;
+        }
 
         System.out.println("[SRNG] Is on!");
 
         // Establish TCP connection with multiple workers
         try (ServerSocket serverSocket = new ServerSocket(randomGeneratorPort)) {
+            serverSocket.bind(new InetSocketAddress(randomGeneratorHost, randomGeneratorPort));
+            System.out.println("[SRNG] Listening on " + randomGeneratorHost + ":" + randomGeneratorPort);
 
             while (true) {
                 // Let multiple worker's connection

@@ -25,16 +25,26 @@ public class WorkerServer {
 
 
     // SecureRandomNumberGenerator Info
-    private static final String SRNG_HOST = "localhost";
-    private static final int SRNG_PORT = 8000;
+    private static String srngHost;
+    private static int srngPort;
 
     public static void main(String[] args) {
-        int port;
-        if(args.length ==1){
-            port = Integer.parseInt(args[0]);
-        }else{
-            port = 6001;
+        if (args.length != 3) {
+            System.out.println("Usage: java backend.worker.WorkerServer <workerPort> <srngHost> <srngPort>");
+            System.out.println("Example: java backend.worker.WorkerServer 6001 192.168.1.20 8000");
+            return;
         }
+
+        int port;
+        try {
+            port = Integer.parseInt(args[0].trim());
+            srngHost = args[1].trim();
+            srngPort = Integer.parseInt(args[2].trim());
+        } catch (Exception e) {
+            System.out.println("Worker invalid startup arguments: " + e.getMessage());
+            return;
+        }
+        System.out.println("Worker configured SRNG at: " + srngHost + ":" + srngPort);
 
 
         try(ServerSocket serverSocket = new ServerSocket(port)){
@@ -765,7 +775,7 @@ public class WorkerServer {
     // Used when manager adds a new game to worker
     // Used in handleAddNewGame()
     private static void registerNewGameToSRNG(String gameName, String secret, int bufferSize) throws Exception{
-        try(Socket socket = new Socket(SRNG_HOST,SRNG_PORT);
+        try(Socket socket = new Socket(srngHost,srngPort);
             BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             PrintWriter output = new PrintWriter(socket.getOutputStream(),true)
         ){
@@ -782,7 +792,7 @@ public class WorkerServer {
     // Used in handleAddNewGame() when some other thread added first from another thread the game
     // && Used in setGameVisibilityInactive()
     private static void  deleteGameFromSRNG(String gameName) throws Exception{
-        try(Socket socket = new Socket(SRNG_HOST,SRNG_PORT);
+        try(Socket socket = new Socket(srngHost,srngPort);
             BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             PrintWriter output = new PrintWriter(socket.getOutputStream(),true)
         ){
@@ -806,7 +816,7 @@ public class WorkerServer {
     //  - Parses the response from SRNG
     private static SRNGReply getNumber(String gameName) throws Exception{
 
-        try( Socket socket = new Socket(SRNG_HOST, SRNG_PORT);
+        try( Socket socket = new Socket(srngHost,srngPort);
              BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
              PrintWriter output = new PrintWriter(socket.getOutputStream(), true)
         ){
