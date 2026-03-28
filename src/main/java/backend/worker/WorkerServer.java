@@ -571,6 +571,7 @@ public class WorkerServer {
                             "GAME|" + game.getGameName() + "|"
                                     + game.getProviderName() + "|"
                                     + game.getStars() + "|"
+                                    + game.getNoOfVotes() +"|"
                                     + game.getBetCategory() + "|"
                                     + gameRisk + "|"
                                     + game.getMinBet() + "|"

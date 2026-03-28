@@ -92,3 +92,9 @@ IN LAPTOP:
 2. run srng: java -cp "target\classes;target\dependency\*" backend.secureRandomGenerator.SecureRandomGeneratorServer 8000 0.0.0.0
 3. run worker2: java -cp "target\classes;target\dependency\*" backend.worker.WorkerServer 6002 192.168.1.107 8000
 4. run worker3: java -cp "target\classes;target\dependency\*" backend.worker.WorkerServer 6003 192.168.1.107 8000
+
+Encountering problem when: FIXED I WASNT CONSUMING TILL END
+1. Manager makes a game inactive -> Client sees it imidiatly
+2. Manager makes this game Active again -> client needs 2 fetches to see the update
+3. Using volatile to fix this issue
+The problem occurs because we have delay when set active again because we need to restart using the SRNG 

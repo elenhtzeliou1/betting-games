@@ -14,6 +14,7 @@ import java.util.Scanner;
 
 public class DummyPlayerApp {
 
+    // simple 'database' that holds search() results for this user that latest searched
     private static final List<SearchResult> lastSearchResults = new ArrayList<>();
     private static String lastPlayerIdThatSearched = null;
 
@@ -114,12 +115,18 @@ public class DummyPlayerApp {
         // send request to master
         output.println("FETCH_ALL_AVAILABLE_GAMES");
 
-        // read his result
-        readMsgUntilEnd(input);
+
+        List<SearchResult> allAvailableGames = readFetchAllAvailableGamesResults(input);
+
+        if(allAvailableGames.isEmpty()){
+            System.out.println("No available games yet!");
+            return;
+        }
+
+        printAllAvailableGames(allAvailableGames);
+
+
     }
-
-
-
 
     // Search() method implementation
     private static void search(Scanner scanner, PrintWriter output, BufferedReader input) throws Exception {
@@ -190,7 +197,7 @@ public class DummyPlayerApp {
             return;
         }
 
-        if(lastSearchResults==null || !lastPlayerIdThatSearched.equalsIgnoreCase(playerId)){
+        if(lastPlayerIdThatSearched == null || !lastPlayerIdThatSearched.equalsIgnoreCase(playerId)){
             System.out.println("You can only play using the latest search results of the same player!");
             return;
         }
@@ -314,7 +321,6 @@ public class DummyPlayerApp {
         }
     }
 
-
     private static String readEnum(Scanner scanner, String prompt, String[] allowed, String def) {
         while (true) {
             System.out.print(prompt);
@@ -336,7 +342,6 @@ public class DummyPlayerApp {
         }
     }
 
-
     private static List<SearchResult> readAndStoreSearchResults(BufferedReader input) throws Exception {
         List<SearchResult> results = new ArrayList<>();
 
@@ -349,25 +354,92 @@ public class DummyPlayerApp {
 
             if(ln.startsWith("GAME|")){
                 String[] parts = ln.split("\\|");
-                if(parts.length ==9){
-                    //correct line
+                if(parts.length == 10){
+                    // correct line
                     SearchResult result = new SearchResult(
                             parts[1].trim(), // gameName
                             parts[2].trim(), // providerName
                             parts[3].trim(), // stars
-                            parts[4].trim(), // betCategory
-                            parts[5].trim(), // risk
-                            parts[6].trim(), // minBet
-                            parts[7].trim(),  // maxBet
-                            parts[8].trim()
+                            parts[4].trim(), // noOfVotes
+                            parts[5].trim(), // betCategory
+                            parts[6].trim(), // risk
+                            parts[7].trim(), // minBet
+                            parts[8].trim(),  // maxBet
+                            parts[9].trim() // jackpot
                     );
                     results.add(result);
                 }else{
                     // wrong line error msg => print it
-                    System.out.println(ln);
+                    System.out.println("Invalid GAME line: "+ln);
                 }
+            }else{
+                // print error / timeouts from masterserver
+                System.out.println(ln);
             }
         }
         return results;
     }
+
+    private static List<SearchResult> readFetchAllAvailableGamesResults(BufferedReader input) throws  Exception{
+        List<SearchResult> allAvailableGamesResults = new ArrayList<>();
+        boolean noGamesMsgAppeared = false;
+
+        String line;
+        while((line = input.readLine()) !=null){
+            if(line.equals("END")) break;
+            line = line.trim();
+            if(line.isBlank()) continue;
+            if(line.startsWith("GAME|")){
+                SearchResult gameSearchRes = parseGameLineRes(line);
+                if(gameSearchRes !=null){
+                    allAvailableGamesResults.add(gameSearchRes);
+                }
+                continue;
+            }
+
+            if (line.equalsIgnoreCase("There are no available games yet!")
+                    || line.equalsIgnoreCase("No available games yet!")) {
+                noGamesMsgAppeared =true;
+               continue; //consume till END
+            }
+
+            // any other non-GAME| line,
+            System.out.println(line);
+        }
+        if (noGamesMsgAppeared && allAvailableGamesResults.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        return allAvailableGamesResults;
+    }
+
+    private static SearchResult parseGameLineRes(String line){
+        String[] parts = line.split("\\|");
+        if(parts.length != 10 ){
+            System.out.println("Invalid game line format: +"+line);
+            return null;
+        }
+
+        return new SearchResult(
+                parts[1].trim(), // gameName
+                parts[2].trim(), // providerName
+                parts[3].trim(), // stars
+                parts[4].trim(), // noOfVotes
+                parts[5].trim(), // betCategory
+                parts[6].trim(), // risk
+                parts[7].trim(), // minBet
+                parts[8].trim(), // maxBet
+                parts[9].trim()  // jackpot
+        );
+    }
+
+    private static void printAllAvailableGames(List<SearchResult> games){
+        System.out.println("\n--- All available games ---");
+        for (SearchResult game : games) {
+            System.out.println(game.toString());
+        }
+        System.out.println("------------------------------");
+    }
+
+
 }

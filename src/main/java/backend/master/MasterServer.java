@@ -229,7 +229,6 @@ public class MasterServer {
     }
 
 
-
     private static void handlePlayerLogic(String inputString,PrintWriter output){
         if (inputString.equalsIgnoreCase("FETCH_ALL_AVAILABLE_GAMES")){
             String workerResponseStr = fetchAllAvailableGames();
@@ -269,7 +268,7 @@ public class MasterServer {
     }
 
 
-    // Handle Manager Requests (Helping Methods)
+    // Handle Manager Requests
     private static void handleAddNewGameRequest(String inputString, PrintWriter output){
         String b64 = inputString.substring("ADD_NEW_GAME ".length()).trim();
 
@@ -489,7 +488,6 @@ public class MasterServer {
         gatherPlayerProfit(userId,reducerHost,reducerPort,output);
     }
 
-
     private static void handleFindSpecificGameProfitLossRequest(String inputString, PrintWriter output){
         String gameName = inputString.substring("SHOW_GAME_PROFIT_LOSS ".length()).trim();
         if(gameName.isBlank()){
@@ -568,7 +566,6 @@ public class MasterServer {
         }
         return gameNames.length() ==0 ? "NO GAMES YET!\n" :  gameNames.toString();
     }
-
 
     private static void gatherProviderProfit(String providerName, String reducerHost, int reducerPort, PrintWriter output){
 
@@ -668,7 +665,7 @@ public class MasterServer {
         String finalResult;
 
         // Safety net: If reducer fails or network error occurs -> timeout (we dont block it forever)
-        long deadline = System.currentTimeMillis()+10_000; // 10 seconds timeout
+        long deadline = System.currentTimeMillis()+10_000; // 40 seconds timeout
 
         // reduceLock protects the shared map (pendingReduceResults)
         // because multiple threads access it
@@ -676,7 +673,7 @@ public class MasterServer {
         // - reducer callback threads writing results in handleReducerPush()
         synchronized (reduceLock) {
 
-            // while the reducer hasnt delivered the result for this jobId, wait
+            // while the reducer hasn't delivered the result for this jobId, wait
             while (!pendingReduceResults.containsKey(key)) {
 
                 // compute remaining time till timeout
@@ -691,7 +688,7 @@ public class MasterServer {
                     // - or timeout expires
                     reduceLock.wait(remain);
                 } catch (InterruptedException e) {
-                    // If the thread is interrupted, show intterupt flag and stop waiting
+                    // If the thread is interrupted, show interrupt flag and stop waiting
                     Thread.currentThread().interrupt();
                     break;
                 }
@@ -700,8 +697,12 @@ public class MasterServer {
             // Take the result and remove it from the map so it doesn't accumulate in memory
             finalResult = pendingReduceResults.remove(key);
         }
+        if (finalResult == null) {
+            return "ERROR FETCH_ALL_AVAILABLE_GAMES timeout (Reducer did not push result)\n";
+        }
+
         // If nothing arrived (timeout/error), return empty message
-        if (finalResult == null || finalResult.isBlank()) {
+        if (finalResult.isBlank()) {
             return "There are no available games yet!\n";
         }
         return finalResult;

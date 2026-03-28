@@ -15,7 +15,7 @@ public class GameState {
 
     // One review per player for THIS game
     // Map<String = userId, Rate> ratesByPlayerId
-    private final Map<String,Rate> ratesByPlayerId = new HashMap<>();
+    private final Map<String, Rate> ratesByPlayerId = new HashMap<>();
 
     // total loss or profit for this exact game
     // implemented later
