@@ -57,7 +57,7 @@ public class ReducerServer {
 
         try(ServerSocket serverSocket = new ServerSocket(port)){
             System.out.println("[ReducerServer] Listening on port: "+port);
-            System.out.println("[ReducerServer] Master callback target: " + masterHost + ":" + masterCallbackPort);
+            System.out.println("[ReducerServer] MasterServer callback target: " + masterHost + ":" + masterCallbackPort);
 
             // Accept connections forever.
             // Each connection is handle in its own thread (multi-threaded reducer)

@@ -21,8 +21,6 @@ public class WorkerServer {
 
     // MAP -> <GameName, GameState>
     private static final Map<String, GameState> gamesByName = new HashMap<>();
-    // List<BetRecord> betHistory = new ArrayList<>();
-
 
     // SecureRandomNumberGenerator Info
     private static String srngHost;

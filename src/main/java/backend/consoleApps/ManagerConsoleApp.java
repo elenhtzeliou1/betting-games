@@ -4,6 +4,8 @@ import java.io.*;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Base64;
 import java.util.Scanner;
@@ -141,19 +143,47 @@ public class ManagerConsoleApp {
         System.out.println("[Adding Game] Give JSON File path: ");
         String path = scanner.nextLine().trim();
 
-        String json = Files.readString(Paths.get(path), StandardCharsets.UTF_8);
+        if (path.isBlank()){
+            System.out.println("Invalid file path. Path is empty!");
+            return;
+        }
+        try{
+            Path filePath = Path.of(path);
 
-        // use base64 encoding to keep it 1line
-        String base64encoding = Base64.getEncoder().encodeToString(json.getBytes(StandardCharsets.UTF_8));
+            if(!Files.exists(filePath)){
+                System.out.println("Invalid file path.This File:"+ path +" doesn't exist");
+                return;
+            }
+            if(!Files.isRegularFile(filePath)){
+                System.out.println("Invalid file format: "+path);
+                return;
+            }
+            String fileName = filePath.getFileName().toString().toLowerCase();
+            if(!fileName.endsWith(".json")){
+                System.out.println("Invalid file format: "+path);
+                System.out.println("Only Json files allowed");
+                return;
+            }
 
-        //send the request to MasterServer
-        output.println("ADD_NEW_GAME " + base64encoding);
 
-        //echo it for debugging:
-        System.out.println("[Adding Game] Path you gave: " + path);
+            String json = Files.readString(filePath, StandardCharsets.UTF_8);
 
-        //read the masterServers Response
-        readMsgUntilEnd(input);
+            // use base64 encoding to keep it 1line
+            String base64encoding = Base64.getEncoder().encodeToString(json.getBytes(StandardCharsets.UTF_8));
+
+            //send the request to MasterServer
+            output.println("ADD_NEW_GAME " + base64encoding);
+
+            //echo it for debugging: REMOVE LATER
+            System.out.println("[Adding Game] Path you gave: " + path);
+
+            //read the masterServers Response
+            readMsgUntilEnd(input);
+        }catch (InvalidPathException e){
+            System.out.println("Invalid File Path: "+ path +" Error msg: "+e.getMessage());
+        }catch (IOException e){
+            System.out.println("Invalid file or error cannot read file: "+path+" Error msg: "+e.getMessage());
+        }
     }
 
     private static void deleteExistingGame(Scanner scanner, BufferedReader input, PrintWriter output) throws Exception {

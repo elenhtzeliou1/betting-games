@@ -50,7 +50,6 @@ public class SecureRandomNumberGeneratorServer {
 
         // Establish TCP connection with multiple workers
         try (ServerSocket serverSocket = new ServerSocket(randomGeneratorPort)) {
-            serverSocket.bind(new InetSocketAddress(randomGeneratorHost, randomGeneratorPort));
             System.out.println("[SRNG] Listening on " + randomGeneratorHost + ":" + randomGeneratorPort);
 
             while (true) {

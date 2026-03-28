@@ -82,13 +82,13 @@
 
 
 ## Running: 
-1. PC RUN MASTERSERVER:  java -cp target\classes;target\dependency\* backend.master.MasterServer 5000 192.168.1.107:7000 192.168.1.103:6001 192.168.1.107:6002 192.168.1.107:6003
-2. Start worker1 to pc java -cp target\classes;target\dependency\* backend.worker.WorkerServer 6001 192.168.1.107 8000
-3. Start Manager to pc: java -cp target\classes;target\dependency\* backend.consoleApps.ManagerConsoleApp 192.168.1.103 5000
-4. Start Player1 to pc:  java -cp target\classes;target\dependency\* backend.consoleApps.DummyPlayerApp 192.168.1.103 5000
+1. PC RUN MASTERSERVER:  java -cp "target\classes;target\dependency\*" backend.master.MasterServer 5000 192.168.1.107:7000 192.168.1.103:6001 192.168.1.107:6002 192.168.1.107:6003
+2. Start worker1 to pc: java -cp "target\classes;target\dependency\*" backend.worker.WorkerServer 6001 192.168.1.107 8000
+3. Start Manager to pc: java -cp "target\classes;target\dependency\*" backend.consoleApps.ManagerConsoleApp 192.168.1.103 5000
+4. Start Player1 to pc:  java -cp "target\classes;target\dependency\*" backend.consoleApps.DummyPlayerApp 192.168.1.103 5000
 
 IN LAPTOP:
-1. run reducerServer: java -cp target\classes;target\dependency\* backend.reducer.ReducerServer 7000 192.168.1.103 5001
-2. run srng: java -cp target\classes;target\dependency\* backend.secureRandomGenerator.SecureRandomGeneratorServer 8000 0.0.0.0
-3. run worker2: java -cp target\classes;target\dependency\* backend.worker.WorkerServer 6002 192.168.1.107 8000
-4. run worker3: java -cp target\classes;target\dependency\* backend.worker.WorkerServer 6003 192.168.1.107 8000
+1. run reducerServer: java -cp "target\classes;target\dependency\*" backend.reducer.ReducerServer 7000 192.168.1.103 5001
+2. run srng: java -cp "target\classes;target\dependency\*" backend.secureRandomGenerator.SecureRandomGeneratorServer 8000 0.0.0.0
+3. run worker2: java -cp "target\classes;target\dependency\*" backend.worker.WorkerServer 6002 192.168.1.107 8000
+4. run worker3: java -cp "target\classes;target\dependency\*" backend.worker.WorkerServer 6003 192.168.1.107 8000
