@@ -15,9 +15,6 @@ public class Rate {
         this.stars = stars;
     }
 
-
-
-
     // Getters and Setters
     public String getPlayerId(){return this.playerId;}
     public String getGameName(){return this.gameName;}
@@ -25,7 +22,5 @@ public class Rate {
 
     // Let user update this Rate stars
     public void setStars(int newStars){this.stars = newStars;}
-
-
 
 }

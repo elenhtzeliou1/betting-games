@@ -21,7 +21,7 @@ public class DummyPlayerApp {
 
     public static void main(String[] args) {
         String masterHost =  "localhost";
-        int masterPort =5000;
+        int masterPort = 5000;
 
         // ManagerConsoleApp <masterHost> <masterPort>
         if(args.length >=1) masterHost = args[0];
@@ -31,11 +31,10 @@ public class DummyPlayerApp {
             BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             PrintWriter output = new PrintWriter(socket.getOutputStream(),true);
 
-
             Scanner scanner = new Scanner(System.in);
             String choice;
 
-            // Read and print to player console the server greeting
+            // Read and print to player console the server's greeting
             System.out.println(input.readLine());
 
             // role
@@ -55,7 +54,6 @@ public class DummyPlayerApp {
                 System.out.println("5. Add Tokens");
                 System.out.println("6. View Balance");
                 System.out.println("0. Exit");
-
 
                 choice=scanner.nextLine().trim();
 
@@ -78,7 +76,7 @@ public class DummyPlayerApp {
                         break;
                     }
                     case "3":{
-                        // Perform Play()
+                        // Perform Play(). Play is only allowed to previous searched games
                         System.out.println("Give playerId (e.g. user123): ");
                         String playerId = scanner.nextLine().trim();
                         play(playerId,scanner,input,output);
@@ -115,23 +113,18 @@ public class DummyPlayerApp {
         // send request to master
         output.println("FETCH_ALL_AVAILABLE_GAMES");
 
-
         List<SearchResult> allAvailableGames = readFetchAllAvailableGamesResults(input);
 
         if(allAvailableGames.isEmpty()){
             System.out.println("No available games yet!");
             return;
         }
-
         printAllAvailableGames(allAvailableGames);
-
-
     }
 
     // Search() method implementation
     private static void search(Scanner scanner, PrintWriter output, BufferedReader input) throws Exception {
-        System.out.println("Give PlayerId (e.g. user123): ");
-        String playerId = scanner.nextLine().trim();
+        String playerId = readValidUsername(scanner, "Give PlayerId (e.g. user123): ");
 
         System.out.println("Give MinStars: (0-5)");
         int minStars = readInt(scanner, "Min stars (0-5, 0=ANY): ", 0, 5);
@@ -207,8 +200,6 @@ public class DummyPlayerApp {
             System.out.println((i+1)+". "+lastSearchResults.get(i));
         }
 
-        // Play repeteadly if player balance enough to place minBet to this game
-        // Ask everytime the player if he want to quit
         int choice = readInt(scanner, "Select game number: ", 1, lastSearchResults.size());
         SearchResult selectedGame = lastSearchResults.get(choice - 1);
 
@@ -221,7 +212,7 @@ public class DummyPlayerApp {
             return;
         }
 
-        // Make the play request and send it to MasterServer
+        // Structure the play request and send it to MasterServer
         String cmd = "PLAY " +playerId +"|"+ selectedGame.getGameName() + "|" +bet;
         output.println(cmd);
 
@@ -229,7 +220,6 @@ public class DummyPlayerApp {
         // Print it
         System.out.println("\n--- PLAY RESULT --- ");
         readMsgUntilEnd(input);
-
     }
 
     // Rate() method implementation
@@ -237,8 +227,7 @@ public class DummyPlayerApp {
     // DON'T let him rate it again
     // If user has already rated this game let him just update this review or delete it
     private static void rate(Scanner scanner, PrintWriter output, BufferedReader input) throws Exception{
-        System.out.println("Give PlayerId (e.g. user123): ");
-        String playerId  = scanner.nextLine().trim();
+        String playerId  = readValidUsername(scanner, "Give PlayerId (e.g. user123): ");
 
         System.out.println("Choose Game for review: ");
         String gameName = scanner.nextLine().trim();
@@ -251,16 +240,13 @@ public class DummyPlayerApp {
 
         System.out.println("Result: ");
         readMsgUntilEnd(input);
-
     }
 
     private static void addTokens(Scanner scanner, PrintWriter output, BufferedReader input) throws Exception {
-        System.out.println("Give userId: ");
-        String userId = scanner.nextLine().trim();
+        String userId = readValidUsername(scanner, "Give PlayerId (e.g. user123): ");
 
         System.out.println("Give token amount you want to add to your balance: ");
         BigDecimal tokens = readBigDecimal(scanner, "Tokens should be > 0");
-
 
         // Send request to Master Server
         String cmd = "ADD_BALANCE "+userId+"|"+tokens;
@@ -271,8 +257,7 @@ public class DummyPlayerApp {
     }
 
     private static void viewBalance(Scanner scanner, PrintWriter output, BufferedReader input) throws Exception {
-        System.out.println("Give UserId: ");
-        String userId = scanner.nextLine().trim();
+        String userId = readValidUsername(scanner, "Give PlayerId (e.g. user123): ");
 
         // Send request to MasterServer
         output.println("VIEW_BALANCE "+userId);
@@ -339,6 +324,19 @@ public class DummyPlayerApp {
         while((line = input.readLine())!=null){
             if(line.equals("END")) break;
             System.out.println(line);
+        }
+    }
+
+    private static String readValidUsername(Scanner scanner, String prompt) {
+        while (true) {
+            System.out.print(prompt);
+            String username = scanner.nextLine().trim();
+
+            if (!username.isEmpty()) {
+                return username;
+            }
+
+            System.out.println("Username is empty! Choose a valid username!");
         }
     }
 
@@ -440,6 +438,5 @@ public class DummyPlayerApp {
         }
         System.out.println("------------------------------");
     }
-
 
 }

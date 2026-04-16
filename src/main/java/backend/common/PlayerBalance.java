@@ -9,7 +9,7 @@ public class PlayerBalance {
         if(balance==null){
             throw new IllegalArgumentException("Balance should not be null");
         }
-        if(balance.compareTo(BigDecimal.ZERO) <0){
+        if(balance.compareTo(BigDecimal.ZERO) < 0){
             throw new IllegalArgumentException("Balance should be >=0");
         }
 
@@ -18,18 +18,17 @@ public class PlayerBalance {
 
     public synchronized void addBalance(BigDecimal amount){
         if (amount == null) throw new IllegalArgumentException("Adding amount should not be null!");
-        if(amount.compareTo(BigDecimal.ZERO)<0) throw new IllegalArgumentException("Adding amount should be > 0");
+        if(amount.compareTo(BigDecimal.ZERO)<=0) throw new IllegalArgumentException("Adding amount should be > 0");
         this.balance = this.balance.add(amount);
     }
 
     public synchronized void removeBalance(BigDecimal amount){
         if (amount == null) throw new IllegalArgumentException("The removable amount should not be null!");
+        if(this.balance.compareTo(amount)<0) throw new IllegalStateException("Insufficient balance");
         this.balance =this.balance.subtract(amount);
     }
 
     public synchronized BigDecimal getBalance() {
         return this.balance;
     }
-
-
 }

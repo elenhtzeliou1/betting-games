@@ -14,7 +14,6 @@ public class PlayerProfitJob extends Job{
     private final String playerId;
     private BigDecimal totalPlayerProfitLoss = BigDecimal.ZERO;
 
-
     public PlayerProfitJob(String jobId, String playerId, int expectedN, String masterHost, int masterCallbackPort){
         super(jobId,expectedN,masterHost,masterCallbackPort);
         this.playerId = playerId;
@@ -37,8 +36,8 @@ public class PlayerProfitJob extends Job{
                 // ignore wrong lines
                 continue;
             }
-
         }
+
         increaseReceivedWorkers();
         if(isJobCompleteAndNotPushed()){
             markComplete();
@@ -52,7 +51,6 @@ public class PlayerProfitJob extends Job{
         lines.add("TOTAL_PLAYER_PROFIT|" + playerId + "|" + totalPlayerProfitLoss);
         return lines;
     }
-
 
     private void pushFinalProviderProfitResultsToMaster(List<String> lines) {
         try (Socket s = new Socket(masterHost, masterCallbackPort);

@@ -19,7 +19,7 @@ import org.json.simple.parser.JSONParser;
 
 
 public class MasterServer {
-    // MasterServer needs to keep his worker
+    // MasterServer needs to keep his workers
     // and also needs to keep player balance's
     // Also needs to hold the reducer
 
@@ -30,7 +30,7 @@ public class MasterServer {
     //
 
     // Set of providers that have Games stored in workers (Set avoids duplicates)
-    // Update the list of providers after successfull storing a game to Worker (Check if already exists)
+    // Update the list of providers after successfully storing a game to Worker (Check if already exists)
     private static final Set<GameProvider> providers = new HashSet<>();
 
     //-------------------- Reducer Info----------------//
@@ -127,7 +127,7 @@ public class MasterServer {
     private static void handleClientRequest(Socket socket){
         try(socket;
             BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            PrintWriter output = new PrintWriter(socket.getOutputStream(), true);) {
+            PrintWriter output = new PrintWriter(socket.getOutputStream(), true)) {
 
             //print hello msg to greet the connected client
             output.println("Welcome to BettingApp!");
@@ -258,11 +258,6 @@ public class MasterServer {
             handlePlayerViewBalanceRequest(inputString,output);
             return;
         }
-        /*
-        else if (inputString.startsWith("CAN_USER_PLAY ")) {
-            handleCanUserPlayRequest(inputString,output);
-            return;
-        }*/
         output.println("ERROR unknown player command");
         output.println("END");
     }
@@ -523,7 +518,7 @@ public class MasterServer {
     // - Returns all the collected response lines (that got from worker) joined with '\n'
     // - If the worker is unreachable or any other IO error happens, the method return an error string
     private static String forwardMsgToWorker(Worker worker, String msg){
-        try(Socket workerSocket = new Socket(worker.getHost(),worker.getPort());){
+        try(Socket workerSocket = new Socket(worker.getHost(),worker.getPort())){
 
             BufferedReader input = new BufferedReader(new InputStreamReader(workerSocket.getInputStream()));
             PrintWriter output = new PrintWriter(workerSocket.getOutputStream(), true);
@@ -719,7 +714,7 @@ public class MasterServer {
             return;
         }
 
-        String playerId = parts[0].trim(); // (not used in filtering right now, but good to keep)
+        String playerId = parts[0].trim(); // (not used in filtering right now, but good to keep??)
         int minStars = Integer.parseInt(parts[1].trim());
         String betCat = parts[2].trim();
         String risk = parts[3].trim();
@@ -807,13 +802,17 @@ public class MasterServer {
             output.println("END");
             return;
         }
-        if(playerBalance.getBalance().compareTo(new BigDecimal(bet)) <0){
-            output.println("Insufficient balance for player: "+playerId+". Add balance to continue or lower your bet!");
-            output.println("END");
-            return;
+
+        synchronized (playerBalance){
+            if(playerBalance.getBalance().compareTo(new BigDecimal(bet)) <0){
+                output.println("Insufficient balance for player: "+playerId+". Add balance to continue or lower your bet!");
+                output.println("END");
+                return;
+            }
+            // Subtract the bet for user's Balance
+            playerBalance.removeBalance(new BigDecimal(bet));
         }
-        // Subtract the bet for user's Balance
-        playerBalance.removeBalance(new BigDecimal(bet));
+
 
         // forward request to worker
         Worker worker = chooseWorker(gameName);
@@ -871,7 +870,9 @@ public class MasterServer {
                 String payoutValue = payoutPart.substring("payout=".length()).trim();
                 BigDecimal payout = new BigDecimal(payoutValue);
 
-                playerBalance.addBalance(payout);
+                if (payout.compareTo(BigDecimal.ZERO) > 0) {
+                    playerBalance.addBalance(payout);
+                }
 
 
             } catch (Exception e) {
@@ -929,7 +930,6 @@ public class MasterServer {
             if (!ln.isBlank()) output.println(ln);
         }
         output.println("END");
-        return;
     }
 
     // Player addBalance() method implementation:
@@ -943,7 +943,7 @@ public class MasterServer {
             output.println("END");
             return;
         }
-        String userId = parts[0].trim();
+        String userId = parts[0].trim().toLowerCase();
         if(userId.isBlank()){
             output.println("Error, userId required!");
             output.println("END");
@@ -976,7 +976,7 @@ public class MasterServer {
         playerBalance.addBalance(tokens);
         BigDecimal updatedBalance = playerBalance.getBalance();
 
-        output.println("OK balance added successfully for userId=" + userId + " | newBalance=" + updatedBalance);
+        output.println("OK balance added successfully for user: " + userId + "\nCurrent Player Balance: " + updatedBalance);
         output.println("END");
     }
 

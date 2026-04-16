@@ -13,7 +13,6 @@ public class Buffer {
         this.integerQueue = new int[capacity];
     }
 
-
     public synchronized void addNumber(int number) throws InterruptedException{
         while (integerQueue.length == size){
             // Buffer full
@@ -65,7 +64,7 @@ public class Buffer {
         // [DEBUG]
 
         System.out.println(
-                "[BUFFER] GET    | number=" + number +
+                "[BUFFER] GET | number=" + number +
                         " | slot=" + previousHead +
                         " | head=" + head +
                         " | tail=" + tail +

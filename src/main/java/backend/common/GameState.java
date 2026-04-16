@@ -67,17 +67,6 @@ public class GameState {
 
     }
 
-    public synchronized boolean deleteExistingRate(String playerId){
-
-        playerId = playerId.trim().toLowerCase(); // normalize
-        Rate rateForRemove = ratesByPlayerId.remove(playerId);
-        if(rateForRemove == null) return false;
-
-        game.decreaseNoOfVotes();
-        game.decreaseStarsSum(rateForRemove.getStars());
-        game.setStars();
-        return true;
-    }
 
     public synchronized BigDecimal getTotalLossProfit(){
         return totalLossProfit;
@@ -87,7 +76,6 @@ public class GameState {
         this.totalLossProfit = this.totalLossProfit.add(delta);
     }
 
-
     public synchronized void addBetRecord(BetRecord record){
         betHistory.add(record);
     }
@@ -95,7 +83,6 @@ public class GameState {
     public synchronized List<BetRecord> getBetHistorySnapshot(){
         return new ArrayList<>(betHistory);
     }
-
 
     // Helping methods
     private void areStarsValueValid(int stars){

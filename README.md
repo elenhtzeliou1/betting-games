@@ -1,100 +1,277 @@
-# 1. FOLDER: secureRandomGenerator
+# Distributed Online Betting Platform
+Course project for Distributed Systems, Department of Informatics,
+Athens University of Economics and Business (AUEB)
+Spring Semester 2025–2026
 
-## - SecureRandomNumberGeneratorServer.java:
-    Multithreaded TCP Server.
-    Can accept multiple worker requests simuteniously.
-    The Requests that executes: 
-        - Register Game
-        - Delete Game
-        - Get Number
-    
-        It stores a HashMap<String, RNGContext> that stores the games and their buffers,producer etc.
-    Via handleWorkerRequest() method it handle the Workers requests. When a worker request's registering a game the SRNGServer performs basic validations about the format of the line protocol that the worker send.
-    It checks if GameName, gameSecret exists and the requested buffer size is greater than 0.
-    If all the above contitions are satisfied the SRNGServer continues with adding the game in the HashMap: games. 
-    If the contitions are not satisfied the method throw the approprieate errors.
-    With this acction simuteinusly the Producer starts filling the buffer.
-    Sychronized is used to lock games HashMap in order to not let any other thread perform updates the same time, in order to secure that the data remains valid.
-    (add more info about this later)
+Overview
 
-        Via handleGameDeletion() method the SRNGServer removes, from the games HashMap, the requested for delete game. And also stops the producer for generating numbers and interrupts the producer thread.
-    If anything fails in the process it throws the apropriate errors.
-    
-        Via hadnleGetNumber() method, the SRNGServer, performs basic validations about the line protocol that the worker used 
-    to send the request. If the protocol is not valid it throws the appropriete erros. If the protocol is valid the server procides with getting the first number of the buffer that this game has stored. 
-    In this process sychronized method is used in order to keep the data valid and handle the case that multiple players request to play in the same game at the same time. If this happen we ensure with sychronize() that everyone will retrieve the
-    correct number from the buffer and that the buffer will fill correctly too.
-    It also perform using the HashHelper validation of the secret key that the game has as the given assigment requested.
-    If error occures in the process the error is send to the Worker. If not the correct number is send to the worker alongside the Secret.
+This project implements a distributed online betting platform in Java. The system supports two main roles:
+
+ - Manager
+    - Add / hide / restore / modify games
+    - View game statistics
+    - View profit/loss aggregations through MapReduce
+ - Player
+    - Browse available games
+    - Search using filters
+    - Play games with a chosen bet
+    - Rate games
+    - Add tokens and view balance
+
+The backend is split across multiple machines and components:
+- MasterServer
+- WorkerServers
+- ReducerServer
+- Secure Random Generator Server (SRNG)
+- Manager Console App
+- Dummy Player App
+
+All communication between backend nodes is implemented exclusively with TCP sockets, as required by the assignment.
+
+---
+
+# Architecture
+
+## 1. MasterServer
+The central coordination node of the system.
+
+Responsibilities:
+
+- Accepts requests from the Manager app and Player app
+- Routes each game to the correct Worker using hashing:
+  - workerIndex = H(gameName) mod numberOfWorkers
+- For search and aggregation requests, coordinates MapReduce
+- For play requests, forwards the request to the Worker that owns the game
+- Receives final Reduce results back from the ReducerServer
+
+## 2. WorkerServer
+The main data-processing node.
+
+Responsibilities: 
+
+* Stores games in memory
+* Processes manager commands such as add / modify / delete / restore
+* Processes player commands such as search, rate, and play
+* Communicates with:
+  * the ReducerServer during MapReduce jobs
+  * the Secure Random Generator Server during play requests
+
+Each Worker is **multithreaded** and can process multiple requests from the Master in parallel.
+
+## 3. ReducerServer
+The Reduce side of the MapReduce pipeline.
+
+Responsibilities:
+
+* Accepts partial map results from Workers
+* Merges the partial results in memory
+* Detects when all expected Workers have submitted results
+* Pushes final results back to the MasterServer
+
+Supported job types:
+
+* Search
+* Provider profit/loss
+* Player profit/loss
+
+## 4. Secure Random Generator Server (SRNG)
+A separate multithreaded TCP server responsible for secure random number generation.
+
+Responsibilities:
+
+* Maintains one random-number pipeline per game
+* Uses a producer-consumer model with a bounded buffer
+* Sends back:
+  * a random integer
+  * sha256(number + secret)
+
+The Worker verifies this hash locally before using the number.
+
+## 5. Manager Console App
+A console-based interface for manager operations.
+
+## 6. Dummy Player App
+A console-based interface for player operations used in the backend phase of the assignment.
+
+---
+
+# Main Design Decisions
+
+## 1. Distributed game placement
+Games are assigned to Workers deterministically using the game name:
+    * NodeId = H(GameName) mod NumberOfWorkers
+
+This ensures:
+
+* predictable routing
+* balanced distribution
+* no need for a central game database
+
+## 2. In-memory storage
+
+All game data is stored in memory on the appropriate Worker, as required by the assignment.
+
+## 3. Producer-consumer SRNG
+
+Because secure random generation has latency, each game has:
+
+* its own bounded buffer
+* its own producer thread
+* a consumer side used by the Worker during PLAY
+
+This avoids generating the random value synchronously at play time.
+
+## 4. Hash-based integrity check
+
+For each play request:
+1. Worker requests a random number from SRNG
+2. SRNG returns number and sha256(number + secret)
+3. Worker recomputes the same hash locally
+4. If hashes match, the number is trusted
+
+---
 
 
-## - RNGConext.java:
-    Represents the SRNG State of ONE Game. It holds everything that SRNG Server needs for THIS game.
-    
-## - Buffer.java:
-    Represents the bounded queue that stores the random generated numbers that the producer generates.
-    It secures that the producer cannot generate more numbers exciding the assigned buffer size.
-    It secures that the consumer (Worker) can not pull number if the buffer is empty (bufferSize = 0)
+# Running the System (2 computers)
 
-## - Producer.java:
-    Generates random integers and stores them inside the buffer.
+Currently tested in just 2 different computers: 
 
-## - HashHelper.java:
-    Shared utility that lets both sides (Worker and SRNG) to execute the same hash calculation.
+## On PC
+1. Start MasterServer
+    ```bash
+   java -cp "target\classes;target\dependency\*" backend.master.MasterServer 5000 192.168.1.107:7000 192.168.1.103:6001 192.168.1.107:6002 192.168.1.107:6003
+    ```
+3. Start Worker 1
+```bash
+   java -cp "target\classes;target\dependency\*" backend.worker.WorkerServer 6001 192.168.1.107 8000
+```
+3. Start Manager Console App
+```bash
+   java -cp "target\classes;target\dependency\*" backend.consoleApps.ManagerConsoleApp 192.168.1.103 5000
+```
+4. Start Dummy Player App
+```bash
+   java -cp "target\classes;target\dependency\*" backend.consoleApps.DummyPlayerApp 192.168.1.103 5000
+```
 
-------
+## On Laptop
+1. Start ReducerServer
+ ```bash
+   java -cp "target\classes;target\dependency\*" backend.reducer.ReducerServer 7000 192.168.1.103 5001
+```
 
-# 2. FOLDER: consoleApps
+2. Start SRNG Server
+ ```bash
+   java -cp "target\classes;target\dependency\*" backend.secureRandomGenerator.SecureRandomNumberGeneratorServer 8000 0.0.0.0
+```
 
-## - ManagerConsoleApp.java
-    Stores all the Manager Console Logic.
-    Holds and prints Manager menu.
-    Sends Manager's requests to MasterServer.
-    Print results back to manager console.
+3. Start Worker 2
+ ```bash
+   java -cp "target\classes;target\dependency\*" backend.worker.WorkerServer 6002 192.168.1.107 8000
+```
 
-    Actions that the Manager can perform at this point: 
-        1. Add new game by providing the JSON file path
-        2. Delete existing game
-        3. Update game risk
-        4. Show all existing games
-        5. Makes existing games again visible to players
-    Should add:
-        2. Show specific provider profits/losses
-        3. Show specific player profits/losses
-        
+4. Start Worker 3
+ ```bash
+   java -cp "target\classes;target\dependency\*" backend.worker.WorkerServer 6003 192.168.1.107 8000
+```
 
-## - DummyPlayerApp.java
-    Store the Player logic
-    Holds and prints Player Menu.
-    Sends Player's requests to MasterServer
-    Print the results back to Player's console.
+---
 
-    Actions that the Player can perform at this point:
-        1. See all available games
-        2. Search() using filters
-        3. Play to a game
-        4. Rate an available game   
-        5. Add tokens to account
-        6. See his total tokens
-    
-    Should add:
-        1. Continue playing to a game and exit only if user asks
+# Run the system (3 Computers)
 
+## Replace these placeholders first
 
-## Running: 
-1. PC RUN MASTERSERVER:  java -cp "target\classes;target\dependency\*" backend.master.MasterServer 5000 192.168.1.107:7000 192.168.1.103:6001 192.168.1.107:6002 192.168.1.107:6003
-2. Start worker1 to pc: java -cp "target\classes;target\dependency\*" backend.worker.WorkerServer 6001 192.168.1.107 8000
-3. Start Manager to pc: java -cp "target\classes;target\dependency\*" backend.consoleApps.ManagerConsoleApp 192.168.1.103 5000
-4. Start Player1 to pc:  java -cp "target\classes;target\dependency\*" backend.consoleApps.DummyPlayerApp 192.168.1.103 5000
+- `<PC1_IP>` = IP of Computer 1  
+  Runs: `MasterServer`, `SecureRandomNumberGeneratorServer`, `DummyPlayerApp`
 
-IN LAPTOP:
-1. run reducerServer: java -cp "target\classes;target\dependency\*" backend.reducer.ReducerServer 7000 192.168.1.103 5001
-2. run srng: java -cp "target\classes;target\dependency\*" backend.secureRandomGenerator.SecureRandomGeneratorServer 8000 0.0.0.0
-3. run worker2: java -cp "target\classes;target\dependency\*" backend.worker.WorkerServer 6002 192.168.1.107 8000
-4. run worker3: java -cp "target\classes;target\dependency\*" backend.worker.WorkerServer 6003 192.168.1.107 8000
+- `<PC2_IP>` = IP of Computer 2  
+  Runs: `WorkerServer`(s), `ManagerConsoleApp`
 
-Encountering problem when: FIXED I WASNT CONSUMING TILL END
-1. Manager makes a game inactive -> Client sees it imidiatly
-2. Manager makes this game Active again -> client needs 2 fetches to see the update
-3. Using volatile to fix this issue
-The problem occurs because we have delay when set active again because we need to restart using the SRNG 
+- `<PC3_IP>` = IP of Computer 3  
+  Runs: `ReducerServer`, `DummyPlayerApp`
+
+### Mapping of service IPs
+
+- `<MASTER_IP>` = `<PC1_IP>`
+- `<SRNG_IP>` = `<PC1_IP>`
+- `<WORKER1_IP>` = `<PC2_IP>`
+- `<WORKER2_IP>` = `<PC2_IP>`
+- `<WORKER3_IP>` = `<PC2_IP>`
+- `<REDUCER_IP>` = `<PC3_IP>`
+
+## On PC
+
+## Computer 1
+Runs: MasterServer, SRNG, Dummy Player
+
+### 1. Start SecureRandomNumberGeneratorServer
+```bash
+java -cp "target\classes;target\dependency\*" backend.secureRandomGenerator.SecureRandomNumberGeneratorServer 8000 0.0.0.0
+```
+### 2. Start MasterServer
+```bash
+java -cp "target\classes;target\dependency\*" backend.master.MasterServer 5000 <REDUCER_IP>:7000 <WORKER1_IP>:6001 <WORKER2_IP>:6002 <WORKER3_IP>:6003
+```
+### 3. Start DummyPlayerApp
+```bash
+java -cp "target\classes;target\dependency\*" backend.consoleApps.DummyPlayerApp <MASTER_IP> 5000
+```
+## Computer 2
+Runs: Workers, Manager
+### 1. Start Worker 1
+```bash
+java -cp "target\classes;target\dependency\*" backend.worker.WorkerServer 6001 <SRNG_IP> 8000
+```
+### 2. Start Worker 2
+```bash
+java -cp "target\classes;target\dependency\*" backend.worker.WorkerServer 6002 <SRNG_IP> 8000
+```
+### 3. Start Worker 3
+```bash
+java -cp "target\classes;target\dependency\*" backend.worker.WorkerServer 6003 <SRNG_IP> 8000
+```
+### 4. Start Manager Console App
+```bash
+java -cp "target\classes;target\dependency\*" backend.consoleApps.ManagerConsoleApp <MASTER_IP> 5000
+```
+
+## Computer 3
+Runs: Reducer, Dummy Player
+
+### 1. Start ReducerServer
+```bash
+java -cp "target\classes;target\dependency\*" backend.reducer.ReducerServer 7000 <MASTER_IP> 5001
+```
+### 2. Start Dummy Player App
+```bash
+java -cp "target\classes;target\dependency\*" backend.consoleApps.DummyPlayerApp <MASTER_IP> 5000
+```
+---
+!!! Important notes (For me)
+MasterServer listens on port 5000.
+MasterServer also opens the reducer callback on port 5001.
+ReducerServer must point back to <MASTER_IP> 5001.
+All workers must point to the SRNG machine, so they use <SRNG_IP> 8000.
+Both Manager and Dummy Players always connect to the Master, so they use <MASTER_IP> 5000.
+
+---
+
+# Build
+This project uses Maven
+
+Compile the project with: 
+```bash
+mvn clean package
+mvn dependency:copy-dependencies
+```
+
+---
+
+# Recommended Startup Order
+We recomment to start the components in the following order:
+
+1. MasterServer
+2. ReducerServer
+3. SecureRandomGeneratorServer
+4. All WorkerServers
+5. ManagerConsoleApp / DummyPlayerApp

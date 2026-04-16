@@ -114,16 +114,6 @@ public class Game {
         return this.betCategory;
     }
 
-    public void setMinBet(BigDecimal minBet){
-        this.minBet = minBet;
-        this.betCategory = calculateBetCategory(minBet);
-    }
-    public void setMaxBet(BigDecimal maxBet){
-        this.maxBet = maxBet;
-    }
-    public void setBetCategory(String betCategory){
-        this.betCategory = betCategory;
-    }
     public void updateBetLimits(BigDecimal minBet, BigDecimal maxBet) {
         this.minBet = minBet;
         this.maxBet = maxBet;

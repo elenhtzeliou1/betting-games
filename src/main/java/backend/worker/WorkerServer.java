@@ -191,6 +191,7 @@ public class WorkerServer {
                         + " | MaxBet: " + game.getMaxBet()
                         + " | BetCategory: " + game.getBetCategory()
                         + " | Risk: " + game.getRiskLevel()
+                        + " | Stars: " + game.getStars()
                         + " | Jackpot: " + jackpot
                         + " | isGameActive: " + gameState.isActive()
                 );
@@ -495,7 +496,7 @@ public class WorkerServer {
 
         GameState gameState;
         synchronized (gamesByName){
-            gameState = gamesByName.get(gameName);
+            gameState = gamesByName.get(gameName.toLowerCase());
         }
 
         if(gameState==null){
@@ -620,7 +621,6 @@ public class WorkerServer {
             return;
         }
 
-
         GameState gameState;
         synchronized (gamesByName){
             gameState = gamesByName.get(gameName);
@@ -644,7 +644,7 @@ public class WorkerServer {
             if (rateSaved){
                 output.println("Your rate is saved! ");
             }else{
-                output.println("ERROR you already rated this game (delete or update your rate)");
+                output.println("ERROR, you already rated this game! You cannot rate again for this game with this id: "+playerId);
             }
         }catch(IllegalArgumentException e){
             output.println("ERROR "+e.getMessage());
@@ -652,7 +652,6 @@ public class WorkerServer {
         output.println("END");
 
     }
-
 
     private static void handlePlayRequest(String inputString, PrintWriter output){
         String payload = inputString.substring("PLAY ".length()).trim();
@@ -787,7 +786,7 @@ public class WorkerServer {
         }
     }
 
-    // Helpring method for Deleting (Hide) this game from SRNG
+    // Helping method for Deleting (Hide) this game from SRNG
     // Used in handleAddNewGame() when some other thread added first from another thread the game
     // && Used in setGameVisibilityInactive()
     private static void  deleteGameFromSRNG(String gameName) throws Exception{

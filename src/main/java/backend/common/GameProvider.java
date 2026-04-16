@@ -12,7 +12,6 @@ public class GameProvider {
         }else {
             this.name=name.trim().toLowerCase();
         }
-
     }
 
     // Getters
