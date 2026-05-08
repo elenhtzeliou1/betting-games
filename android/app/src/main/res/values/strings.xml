@@ -1,0 +1,23 @@
+<resources>
+    <string name="app_name">BettingApp</string>
+    <string name="freebet_games_logo">Freebet Games Logo</string>
+    <string name="enter_your_id">Enter your id</string>
+    <string name="enter_your_Id">Enter your Id</string>
+    <string name="connect">Connect</string>
+    <string name="slot_machine">Dummy Text</string>
+    <string name="no_games_available">No games available</string>
+    <string name="close">Close</string>
+    <string name="deposit">Deposit</string>
+    <string name="_0_00">0.00</string>
+    <string name="account_balance">Account Balance</string>
+    <string name="logout">Logout</string>
+    <string name="search">Search</string>
+    <string name="back">Back</string>
+    <string name="card_deposit">Card Deposit</string>
+    <string name="amount">Amount</string>
+    <string name="any">Any</string>
+    <string name="low">Low</string>
+    <string name="play">PLAY</string>
+    <string name="play_now">Play Now</string>
+    <string name="rate">Rate</string>
+</resources>

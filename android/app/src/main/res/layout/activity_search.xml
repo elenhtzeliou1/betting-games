@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#1A0D12"
+    android:orientation="vertical"
+    android:paddingStart="10dp"
+    android:paddingEnd="10dp">
+
+    <include
+        android:id="@+id/toolbar"
+        layout="@layout/layout_toolbar_simple"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"/>
+
+    <!-- Filters card -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/rounded_deposit_box"
+        android:padding="14dp"
+        android:layout_marginTop="10dp">
+
+        <!-- Min Stars -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Min stars"
+            android:textColor="#ffffff"
+            android:textSize="11sp"/>
+
+        <LinearLayout
+            android:id="@+id/starsContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="12dp">
+
+            <!-- 5 star ImageViews, wired up in Java -->
+            <ImageView android:id="@+id/star1" android:layout_width="28dp" android:layout_height="28dp" android:src="@drawable/icon_star" android:layout_marginEnd="4dp"/>
+            <ImageView android:id="@+id/star2" android:layout_width="28dp" android:layout_height="28dp" android:src="@drawable/icon_star" android:layout_marginEnd="4dp"/>
+            <ImageView android:id="@+id/star3" android:layout_width="28dp" android:layout_height="28dp" android:src="@drawable/icon_star" android:layout_marginEnd="4dp"/>
+            <ImageView android:id="@+id/star4" android:layout_width="28dp" android:layout_height="28dp" android:src="@drawable/icon_star" android:layout_marginEnd="4dp"/>
+            <ImageView android:id="@+id/star5" android:layout_width="28dp" android:layout_height="28dp" android:src="@drawable/icon_star"/>
+
+        </LinearLayout>
+
+        <!-- Bet Category -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Bet category"
+            android:textColor="#ffffff"
+            android:textSize="11sp"/>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="12dp"
+            >
+            <Button android:id="@+id/chipBetAny" style="@style/ChipButton" android:text="Any"/>
+            <Button android:id="@+id/chipBet1"   style="@style/ChipButton" android:text="$"/>
+            <Button android:id="@+id/chipBet2"   style="@style/ChipButton" android:text="$$"/>
+            <Button android:id="@+id/chipBet3"   style="@style/ChipButton" android:text="$$$"/>
+        </LinearLayout>
+
+        <!-- Risk Level -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Risk level"
+            android:textColor="#ffffff"
+            android:textSize="11sp"/>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="6dp"
+            >
+            <Button android:id="@+id/chipRiskAny"    style="@style/ChipButton" android:text="Any"/>
+            <Button android:id="@+id/chipRiskLow"    style="@style/ChipButton" android:text="Low"/>
+            <Button android:id="@+id/chipRiskMedium" style="@style/ChipButton" android:text="Medium"/>
+            <Button android:id="@+id/chipRiskHigh"   style="@style/ChipButton" android:text="High"/>
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Search button -->
+    <Button
+        android:id="@+id/btnSearch"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="10dp"
+        android:backgroundTint="#971959"
+        android:text="Search"
+        android:textColor="@color/white"/>
+
+    <!-- Results count -->
+    <TextView
+        android:id="@+id/resultsCount"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/white"
+        android:textSize="11sp"
+        android:layout_marginTop="10dp"
+        android:visibility="gone"/>
+
+    <!-- Results grid — reuses existing item_card_game :) -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/searchRecyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="6dp"
+        android:clipToPadding="false"
+        android:padding="4dp"
+        android:visibility="gone"/>
+
+</LinearLayout>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+
+    <!-- Pill-like corners -->
+    <corners android:radius="14dp" />
+
+    <!--
+        White fill so android:backgroundTint in the layout
+        applies the risk colour cleanly (red / orange / green).
+    -->
+    <solid android:color="#FFFFFF" />
+
+</shape>
