@@ -352,7 +352,7 @@ public class DummyPlayerApp {
 
             if(ln.startsWith("GAME|")){
                 String[] parts = ln.split("\\|");
-                if(parts.length == 10){
+                if(parts.length == 11){
                     // correct line
                     SearchResult result = new SearchResult(
                             parts[1].trim(), // gameName
@@ -363,7 +363,8 @@ public class DummyPlayerApp {
                             parts[6].trim(), // risk
                             parts[7].trim(), // minBet
                             parts[8].trim(),  // maxBet
-                            parts[9].trim() // jackpot
+                            parts[9].trim(), // jackpot
+                            parts[10].trim() // gameLogo
                     );
                     results.add(result);
                 }else{
@@ -413,7 +414,7 @@ public class DummyPlayerApp {
 
     private static SearchResult parseGameLineRes(String line){
         String[] parts = line.split("\\|");
-        if(parts.length != 10 ){
+        if(parts.length != 11 ){
             System.out.println("Invalid game line format: +"+line);
             return null;
         }
@@ -427,7 +428,8 @@ public class DummyPlayerApp {
                 parts[6].trim(), // risk
                 parts[7].trim(), // minBet
                 parts[8].trim(), // maxBet
-                parts[9].trim()  // jackpot
+                parts[9].trim(), // jackpot
+                parts[10].trim() // gameLogo
         );
     }
 

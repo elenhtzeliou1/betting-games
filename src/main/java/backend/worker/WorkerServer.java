@@ -540,7 +540,7 @@ public class WorkerServer {
             // Reducer Command format: MAP_SEARCH <jobId> <expectedN>
             writer.println("MAP_SEARCH "+ jobId+ " "+ expectedN);
 
-            // Lock gamesByName while the itteration happens to avoid concurrent modification issues
+            // Lock gamesByName while the iteration happens to avoid concurrent modification issues
             // (Workers are multithreaded; another request could add/delete/update game visibility.)
 
             synchronized (gamesByName){
@@ -577,7 +577,8 @@ public class WorkerServer {
                                     + gameRisk + "|"
                                     + game.getMinBet() + "|"
                                     + game.getMaxBet() + "|"
-                                    + jackpot
+                                    + jackpot + "|"
+                                    + game.getGameLogo()
                     );
                 }
             }

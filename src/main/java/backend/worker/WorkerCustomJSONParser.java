@@ -29,7 +29,8 @@ public class WorkerCustomJSONParser {
         // basic validations
         if(gameName.isBlank()) throw new IllegalArgumentException("GameName is missing!");
         if(providerName.isBlank()) throw new IllegalArgumentException("ProviderName is missing!");
-        if (hashKey.isBlank()) throw new IllegalArgumentException("HashKey is missing!");
+        if(hashKey.isBlank()) throw new IllegalArgumentException("HashKey is missing!");
+        if(gameLogo.isBlank()) throw new IllegalArgumentException("GameLogo is missing!");
         if(stars < 0) throw new IllegalArgumentException("Stars must be >=0");
         if(minBet.compareTo(BigDecimal.ZERO) <= 0) throw new IllegalArgumentException("MinBet must be >0!");
         if(maxBet.compareTo(BigDecimal.ZERO)<=0 ) throw new IllegalArgumentException("MaxBet must be >0!");
