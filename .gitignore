@@ -37,3 +37,14 @@ build/
 
 ### Mac OS ###
 .DS_Store"android/local.properties" 
+
+# Android build files
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/**/*.iml
+android/captures/
+android/.externalNativeBuild/
+android/.cxx/
