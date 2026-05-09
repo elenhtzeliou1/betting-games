@@ -6,6 +6,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.lifecycle.ViewModelProvider;
@@ -14,6 +15,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.bettingapp.R;
 import com.example.bettingapp.adapters.GameAdapter;
+import com.example.bettingapp.fragments.GameBottomSheetFragment;
 import com.example.bettingapp.model.SearchResult;
 import com.example.bettingapp.network.MasterConnection;
 import com.example.bettingapp.network.MasterProtocol;
@@ -47,7 +49,19 @@ public class SearchActivity extends AppCompatActivity {
         AppViewModel appViewModel = new ViewModelProvider(this).get(AppViewModel.class);
         masterConnection = appViewModel.getConnection();
 
-        playerId = appViewModel.getPlayerId();
+        playerId = getIntent().getStringExtra("PLAYER_ID");
+        if (playerId == null || playerId.trim().isEmpty()) {
+            playerId = appViewModel.getPlayerId();
+        }
+
+        if (playerId == null || playerId.trim().isEmpty()) {
+            Toast.makeText(this, "Missing player id", Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
+
+        playerId = playerId.trim().toLowerCase();
+        appViewModel.setPlayerId(playerId);
 
         // Toolbar setup
         findViewById(R.id.btnBack).setOnClickListener(v -> finish());
@@ -59,6 +73,22 @@ public class SearchActivity extends AppCompatActivity {
         recyclerView.setLayoutManager(new GridLayoutManager(this, 3));
         gameAdapter = new GameAdapter();
         recyclerView.setAdapter(gameAdapter);
+
+        gameAdapter.setOnGameClickListener(game -> {
+            GameBottomSheetFragment sheet = GameBottomSheetFragment.newInstance(
+                    game.getGameName(),
+                    game.getProviderName(),
+                    game.getMinBet(),
+                    game.getMaxBet(),
+                    game.getJackpot(),
+                    game.getRisk(),
+                    game.getBetCategory(),
+                    game.getStars(),
+                    game.getNoOfVotes()
+            );
+
+            sheet.show(getSupportFragmentManager(), GameBottomSheetFragment.TAG);
+        });
 
         setupStars();
         setupBetChips();

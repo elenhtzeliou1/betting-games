@@ -94,7 +94,20 @@ public class PlayActivity extends AppCompatActivity {
         // --- Connection & playerId from AppViewModel (main thread) ---
         AppViewModel appViewModel = new ViewModelProvider(this).get(AppViewModel.class);
         masterConnection = appViewModel.getConnection();
-        playerId = appViewModel.getPlayerId();
+
+        playerId = getIntent().getStringExtra(EXTRA_PLAYER_ID);
+        if (playerId == null || playerId.trim().isEmpty()) {
+            playerId = appViewModel.getPlayerId();
+        }
+
+        if (playerId == null || playerId.trim().isEmpty()) {
+            Toast.makeText(this, "Missing player id", Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
+
+        playerId = playerId.trim().toLowerCase();
+        appViewModel.setPlayerId(playerId);
 
         // --- Intent extras ---
         gameName = getIntent().getStringExtra(EXTRA_GAME_NAME);

@@ -1,5 +1,6 @@
 package com.example.bettingapp.fragments;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.ViewModelProvider;
 
 import android.content.Intent;
 import android.os.Bundle;
@@ -12,10 +13,13 @@ import com.example.bettingapp.R;
 import com.example.bettingapp.activities.CasinoActivity;
 import com.example.bettingapp.activities.DepositActivity;
 import com.example.bettingapp.activities.SignInActivity;
+import com.example.bettingapp.viewmodel.AppViewModel;
 
 public class AccountFragment extends Fragment {
 
     private TextView boxAmount;
+    private String playerId;
+    private AppViewModel appViewModel;
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
@@ -24,7 +28,9 @@ public class AccountFragment extends Fragment {
         View view = inflater.inflate(R.layout.fragment_account, container, false);
 
         // show username
-        String playerId = ((CasinoActivity) requireActivity()).getPlayerId();
+        appViewModel = new ViewModelProvider(requireActivity()).get(AppViewModel.class);
+        playerId = appViewModel.getPlayerId() != null ? appViewModel.getPlayerId() : "";
+
         ((TextView) view.findViewById(R.id.textView2)).setText(playerId);
 
         // close the account pop page
@@ -40,6 +46,10 @@ public class AccountFragment extends Fragment {
 
         // Logout
         view.findViewById(R.id.logoutBox).setOnClickListener(v ->{
+            if (appViewModel != null) {
+                appViewModel.clearSession();
+            }
+
             Intent intent = new Intent(requireActivity(), SignInActivity.class);
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
             startActivity(intent);
@@ -59,7 +69,7 @@ public class AccountFragment extends Fragment {
 
     private void openDeposit() {
         Intent intent = new Intent(requireActivity(), DepositActivity.class);
-        intent.putExtra("PLAYER_ID", ((CasinoActivity) requireActivity()).getPlayerId());
+        intent.putExtra("PLAYER_ID", playerId);
         startActivity(intent);
     }
 }

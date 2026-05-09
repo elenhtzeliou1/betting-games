@@ -123,13 +123,14 @@ public class GameBottomSheetFragment extends BottomSheetDialogFragment {
         // Play Button
         btnPlay.setOnClickListener(v -> {
             Intent intent = new Intent(requireContext(), PlayActivity.class);
-            intent.putExtra(PlayActivity.EXTRA_GAME_NAME,    gameName);
-            intent.putExtra(PlayActivity.EXTRA_PROVIDER,     provider);
+            intent.putExtra(PlayActivity.EXTRA_PLAYER_ID, playerId);
+            intent.putExtra(PlayActivity.EXTRA_GAME_NAME, gameName);
+            intent.putExtra(PlayActivity.EXTRA_PROVIDER, provider);
             intent.putExtra(PlayActivity.EXTRA_BET_CATEGORY, betCategory);
-            intent.putExtra(PlayActivity.EXTRA_RISK,         formatRisk(risk));
-            intent.putExtra(PlayActivity.EXTRA_MIN_BET,      minBet);
-            intent.putExtra(PlayActivity.EXTRA_MAX_BET,      maxBet);
-            intent.putExtra(PlayActivity.EXTRA_JACKPOT,      jackpot);
+            intent.putExtra(PlayActivity.EXTRA_RISK, formatRisk(risk));
+            intent.putExtra(PlayActivity.EXTRA_MIN_BET, minBet);
+            intent.putExtra(PlayActivity.EXTRA_MAX_BET, maxBet);
+            intent.putExtra(PlayActivity.EXTRA_JACKPOT, jackpot);
             startActivity(intent);
             dismiss();
         });
@@ -137,12 +138,13 @@ public class GameBottomSheetFragment extends BottomSheetDialogFragment {
         // Rate Button
         btnRate.setOnClickListener(v -> {
             Intent intent = new Intent(requireContext(), RateActivity.class);
-            intent.putExtra("GAME_NAME",         gameName);
-            intent.putExtra("GAME_PROVIDER",     provider);
-            intent.putExtra("GAME_RISK",         formatRisk(risk));
+            intent.putExtra("PLAYER_ID", playerId);
+            intent.putExtra("GAME_NAME", gameName);
+            intent.putExtra("GAME_PROVIDER", provider);
+            intent.putExtra("GAME_RISK", formatRisk(risk));
             intent.putExtra("GAME_BET_CATEGORY", betCategory);
-            intent.putExtra("GAME_STARS",        stars);
-            intent.putExtra("GAME_VOTES",        votes);
+            intent.putExtra("GAME_STARS", stars);
+            intent.putExtra("GAME_VOTES", votes);
             startActivity(intent);
             dismiss();
         });

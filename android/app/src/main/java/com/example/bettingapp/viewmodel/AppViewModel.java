@@ -7,17 +7,38 @@ import androidx.lifecycle.AndroidViewModel;
 import com.example.bettingapp.network.MasterConnection;
 
 public class AppViewModel extends AndroidViewModel {
-    private MasterConnection connection;
-    private String playerId;
 
-    public AppViewModel(Application app){ super(app); }
+    private static MasterConnection sharedConnection;
+    private static String sharedPlayerId;
 
-    public MasterConnection getConnection(){
-        if(connection == null) connection = new MasterConnection();
-        return connection;
+    public AppViewModel(Application app) {
+        super(app);
     }
 
-    public void setPlayerId(String id) {this.playerId = id; }
-    public String getPlayerId(){return playerId;}
+    public synchronized MasterConnection getConnection() {
+        if (sharedConnection == null) {
+            sharedConnection = new MasterConnection();
+        }
+        return sharedConnection;
+    }
 
+    public void setPlayerId(String id) {
+        if (id == null) {
+            sharedPlayerId = null;
+        } else {
+            sharedPlayerId = id.trim().toLowerCase();
+        }
+    }
+
+    public String getPlayerId() {
+        return sharedPlayerId;
+    }
+
+    public synchronized void clearSession() {
+        if (sharedConnection != null) {
+            sharedConnection.disconnect();
+            sharedConnection = null;
+        }
+        sharedPlayerId = null;
+    }
 }

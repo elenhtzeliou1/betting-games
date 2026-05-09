@@ -35,7 +35,13 @@ public class CasinoActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_casino);
 
-        playerId = getIntent().getStringExtra("PLAYER_ID").trim().toLowerCase();
+        String incomingPlayerId = getIntent().getStringExtra("PLAYER_ID");
+        if (incomingPlayerId == null || incomingPlayerId.trim().isEmpty()) {
+            Toast.makeText(this, "Missing player id", Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
+        playerId = incomingPlayerId.trim().toLowerCase();
 
         ViewCompat.setOnApplyWindowInsetsListener(
                 findViewById(R.id.toolbarRoot), (v, insets) -> {
@@ -143,6 +149,9 @@ public class CasinoActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        masterConnection.disconnect();
+
+        if (isFinishing() && masterConnection != null) {
+            masterConnection.disconnect();
+        }
     }
 }

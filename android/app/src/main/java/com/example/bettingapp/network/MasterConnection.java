@@ -18,20 +18,32 @@ public class MasterConnection {
         input  = new BufferedReader(new InputStreamReader(socket.getInputStream()));
         output = new PrintWriter(socket.getOutputStream(), true);
 
-        input.readLine(); // maybe remove it we dont need it
+        input.readLine();
         output.println("PLAYER");
         input.readLine();
+
         connected = true;
     }
 
     public synchronized List<String> sendCommand(String command) throws Exception{
+        if (!connected || socket == null || socket.isClosed() || output == null || input == null) {
+            connect();
+        }
+
         output.println(command);
         List<String> lines = new ArrayList<>();
         String line;
+
         while ((line = input.readLine()) != null) {
             if ("END".equals(line)) break;
             if (!line.isBlank()) lines.add(line);
         }
+
+        if (line == null) {
+            connected = false;
+            throw new Exception("Connection closed by Master");
+        }
+
         return lines;
     }
 

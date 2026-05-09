@@ -30,8 +30,20 @@ public class DepositActivity extends AppCompatActivity {
         AppViewModel appViewModel = new ViewModelProvider(this).get(AppViewModel.class);
         masterConnection = appViewModel.getConnection();
 
-        // get player id
-        playerId = appViewModel.getPlayerId();
+        playerId = getIntent().getStringExtra("PLAYER_ID");
+        if (playerId == null || playerId.trim().isEmpty()) {
+            playerId = appViewModel.getPlayerId();
+        }
+
+        if (playerId == null || playerId.trim().isEmpty()) {
+            Toast.makeText(this, "Missing player id", Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
+
+        playerId = playerId.trim().toLowerCase();
+        appViewModel.setPlayerId(playerId);
+
 
         // Toolbar setup
         findViewById(R.id.btnBack).setOnClickListener(v -> finish());

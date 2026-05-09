@@ -25,6 +25,8 @@ public class RateActivity extends AppCompatActivity {
 
     private static final String PREFS_NAME = "game_ratings";
 
+    public static final String EXTRA_PLAYER_ID = "PLAYER_ID";
+
     private int selectedRating = 0;
     private ImageButton[] stars;
     private Button submitButton;
@@ -52,7 +54,20 @@ public class RateActivity extends AppCompatActivity {
         // Get connection & player id from AppViewModel (main Thread)
         AppViewModel appViewModel = new ViewModelProvider(this).get(AppViewModel.class);
         masterConnection = appViewModel.getConnection();
-        playerId = appViewModel.getPlayerId();
+
+        playerId = getIntent().getStringExtra(EXTRA_PLAYER_ID);
+        if (playerId == null || playerId.trim().isEmpty()) {
+            playerId = appViewModel.getPlayerId();
+        }
+
+        if (playerId == null || playerId.trim().isEmpty()) {
+            Toast.makeText(this, "Missing player id", Toast.LENGTH_SHORT).show();
+            finish();
+            return;
+        }
+
+        playerId = playerId.trim().toLowerCase();
+        appViewModel.setPlayerId(playerId);
 
         // Toolbar
         TextView toolbarTitle = findViewById(R.id.toolbarTitle);
