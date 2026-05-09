@@ -26,8 +26,7 @@ public class MasterServer {
     private static final List<Worker> workers = new ArrayList<>();
     private static final Map<String, PlayerBalance> playerBalances = new HashMap<>();
 
-    // Reducer reducer;
-    //
+    private static final int REPLICATION_FACTOR = 2; // 1primary + 1 replica
 
     // Set of providers that have Games stored in workers (Set avoids duplicates)
     // Update the list of providers after successfully storing a game to Worker (Check if already exists)
@@ -141,9 +140,7 @@ public class MasterServer {
             role = role.trim().toUpperCase();
             //debug the role to client
             output.println("Client role is ok: "+ role);
-            // remove the upper line later
-            //
-            //
+
             while(true){
                 String inputString = input.readLine();
                 if(inputString == null) break;
@@ -278,7 +275,7 @@ public class MasterServer {
             gameName = (String) obj.get("GameName");
             providerName = (String) obj.get("ProviderName");
         }catch (Exception e){
-            output.println("[MasterServer] Error: Invalid JSON: "+e.getMessage());
+            output.println("[MasterServer] Error: Invalid JSON: " + e.getMessage());
             output.println("END");
             return;
         }
@@ -297,37 +294,43 @@ public class MasterServer {
         System.out.println("[MasterServer] Given GameName: " + gameName);
 
         // Choose worker
-        Worker worker = chooseWorker(gameName);
+        List<Worker> replicas = getWorkersForGame(gameName);
+        Worker primary = replicas.get(0);
 
-        //Debug: Print the chosen worker
-        System.out.println("[MasterServer] Chosen worker: "+ worker.getPort());
+        System.out.println("[MasterServer] ADD_NEW_GAME primary="+ primary + " replicas="+ replicas.subList(1, replicas.size()));
 
-        //Debug: Print the JSON
-        System.out.println("[MasterServer] Full Given JSON: "+json);
 
-        //Forward the request to the choosen worker:
-        String workerResponse = forwardMsgToWorker(worker, "ADD_NEW_GAME "+ b64);
-
-        //show to which worker the request was routed
-        output.println("Master server routed Manager Request to worker: "+ worker.getPort());
-
-        // Check if worker send "STORED" (it's the first line, meaning success)
-        String firstLine = workerResponse.split("\\R",2)[0];
-        firstLine = firstLine.trim();
-
-        GameProvider provider = new GameProvider(providerName);
+        // 1. Send full command to primary worker (he registers to SRNG + stores data)
+        String primaryWorkerResponse;
+        try{
+            primaryWorkerResponse = forwardMsgToWorkerOrThrowExc(primary, "ADD_NEW_GAME " + b64);
+        }catch (Exception e){
+            output.println("ERROR Primary worker "+ primary + " unreachable: "+ e.getMessage());
+            output.println("END");
+            return;
+        }
+        String firstLine = primaryWorkerResponse.split("\\R", 2)[0].trim();
         if(firstLine.equalsIgnoreCase("STORED")){
-
-            // Update providers list (Set will store it if it doesnt exists)
             synchronized (providers){
-                providers.add(provider);
+                providers.add(new GameProvider(providerName));
             }
         }
-        //Give all the worker response
-        for(String ln : workerResponse.split("\n")){
-            if(!ln.isBlank()) output.println(ln);
+        // 2. Send REPLICA command to all other replicas (they store dat only the DO NOT REGISTER to SRNG)
+        for(int i = 1; i< replicas.size(); i++){
+            Worker replica = replicas.get(i);
+
+            try{
+                forwardMsgToWorkerOrThrowExc(replica, "ADD_NEW_GAME_REPLICA "+ b64);
+                System.out.println("[MasterServer] ADD_NEW_GAME_REPLICA sent to replica: "+ replica);
+            }catch (Exception e){
+                System.out.println("[MasterServer] Warning: Replica: "+replica +" unreachable for ADD_NEW_GAME: " + e.getMessage());
+            }
         }
 
+        output.println("Master routed to primary worker: " + primary.getPort());
+        for(String ln : primaryWorkerResponse.split("\n")){
+            if(!ln.isBlank()) output.println(ln);
+        }
         output.println("END");
     }
 
@@ -410,20 +413,28 @@ public class MasterServer {
             }
         }
 
-        // Send it to its worker (it's owner)
-        Worker worker = chooseWorker(gameName);
+        // Send MODIFY_GAME to ALL replicas
+        // same command no SRNG involved
+        List<Worker> replicas = getWorkersForGame(gameName);
+        String primaryWorkerResponse = null;
+        String cmd = "MODIFY_GAME " + gameName + "|" + providerName + "|" + riskLevelStr + "|" + minBetStr + "|" + maxBetStr;
 
-        // Take the worker's response
-        String workerResponse = forwardMsgToWorker(
-                worker,
-                "MODIFY_GAME " + gameName + "|" + providerName + "|" + riskLevelStr + "|" + minBetStr + "|" + maxBetStr
-        );
+        for(int i=0; i < replicas.size(); i++){
+            Worker w = replicas.get(i);
+            try{
+                String response = forwardMsgToWorkerOrThrowExc(w, cmd);
+                if(i==0) primaryWorkerResponse = response;
+            }catch (Exception e){
+                System.out.println("[MasterServer] WARNING: MODIFY_GAME failed for worker "+ w + ": " + e.getMessage());
+            }
+        }
 
-        // Send the response to Manager
-        for(String ln: workerResponse.split("\n")){
-            if (!ln.isBlank()) output.println(ln);
+        String responseToShow = primaryWorkerResponse != null ? primaryWorkerResponse : "ERROR all worker are unreachable\n";
+        for(String ln: responseToShow.split("\n")){
+            if(!ln.isBlank()) output.println(ln);
         }
         output.println("END");
+
     }
 
     private static void handleDeleteExistingGameRequest(String inputString, PrintWriter output){
@@ -435,16 +446,35 @@ public class MasterServer {
             return;
         }
 
-        Worker worker = chooseWorker(gameName);
-        String workerResponse = forwardMsgToWorker(worker, "DELETE_EXISTING_GAME "+gameName);
+        List<Worker> replicas = getWorkersForGame(gameName);
+        Worker primary = replicas.get(0);
 
-        for(String ln : workerResponse.split("\n")){
+        // Primary: full delete (deregisters SRNG + set inactive)
+        String primaryWorkerResponse;
+        try{
+            primaryWorkerResponse = forwardMsgToWorkerOrThrowExc(primary, "DELETE_EXISTING_GAME "+ gameName);
+        }catch (Exception e){
+            output.println("ERROR Primary worker "+ primary+" unreachable: "+ e.getMessage());
+            output.println("END");
+            return;
+        }
+        // Replicas: set Inactive, only no SRNG interaction
+        for (int i = 1; i< replicas.size(); i++) {
+            Worker replica = replicas.get(i);
+            try {
+                forwardMsgToWorkerOrThrowExc(replica, "DELETE_EXISTING_GAME_REPLICA " + gameName);
+            } catch (Exception e) {
+                System.out.println("[MasterServer] Warning: DELETE replica " + replica + " unreachable: " + e.getMessage());
+            }
+        }
+
+        for(String ln : primaryWorkerResponse.split("\n")){
             if(!ln.isBlank()) output.println(ln);
         }
         output.println("END");
     }
 
-   private static void handleMakeGameVisibleAgain(String inputString, PrintWriter output){
+    private static void handleMakeGameVisibleAgain(String inputString, PrintWriter output){
         String gameName = inputString.substring("MAKE_VISIBLE ".length()).trim();
 
         if(gameName.isBlank()){
@@ -452,14 +482,34 @@ public class MasterServer {
             output.println("END");
             return;
         }
-        Worker worker = chooseWorker(gameName);
-        String workerResponse = forwardMsgToWorker(worker,"MAKE_VISIBLE "+gameName);
+        List<Worker> replicas = getWorkersForGame(gameName);
+        Worker primary = replicas.get(0);
 
-       for(String ln : workerResponse.split("\n")){
-           if(!ln.isBlank()) output.println(ln);
-       }
-       output.println("END");
-   }
+        // Primary : Make FULL visible (re -register SRNG + set active)
+        String primaryWorkerResponse;
+        try{
+            primaryWorkerResponse = forwardMsgToWorkerOrThrowExc(primary, "MAKE_VISIBLE "+ gameName);
+        }catch (Exception e){
+            output.println("ERROR Primary worker "+ primary + " unreachable: " + e.getMessage());
+            output.println("END");
+            return;
+        }
+
+        // Replicas: set active only (NO SRNG interraction)
+        for (int i= 1; i < replicas.size(); i++){
+            Worker replica = replicas.get(i);
+            try{
+                forwardMsgToWorkerOrThrowExc(replica, "MAKE_VISIBLE_REPLICA " + gameName);
+            }catch (Exception e){
+                System.out.println("[MasterServer] WARNING: MAKE_VISIBLE replica " + replica + " unreachable: " + e.getMessage());
+            }
+        }
+
+        for(String ln : primaryWorkerResponse.split("\n")){
+            if(!ln.isBlank()) output.println(ln);
+        }
+        output.println("END");
+    }
 
     private static void handleFindSpecifProviderProfitLossRequest(String inputString, PrintWriter output){
         String providerName = inputString.substring("FIND_PROVIDER_PROFIT_LOSS ".length()).trim();
@@ -490,9 +540,23 @@ public class MasterServer {
             output.println("END");
             return;
         }
-        Worker worker = chooseWorker(gameName);
+        // Try primary first, fallback to replicas
+        List<Worker> replicas = getWorkersForGame(gameName);
+        String workerResponse = null;
 
-        String workerResponse = forwardMsgToWorker(worker, "SHOW_GAME_PROFIT_LOSS "+gameName);
+        for (Worker w : replicas) {
+            try {
+                workerResponse = forwardMsgToWorkerOrThrowExc(w, "SHOW_GAME_PROFIT_LOSS " + gameName);
+                break; // success
+            } catch (Exception e) {
+                System.out.println("[MasterServer] Worker " + w + " unreachable for SHOW_GAME_PROFIT_LOSS, trying replica...");
+            }
+        }
+        if (workerResponse == null) {
+            output.println("ERROR All workers unreachable for game: " + gameName);
+            output.println("END");
+            return;
+        }
 
         for (String ln : workerResponse.split("\n")) {
             if (!ln.isBlank()) output.println(ln);
@@ -544,22 +608,58 @@ public class MasterServer {
         }
     }
 
+    // Forwards msg to worker and THROWS on network failure. used by replication logic
+    private static String forwardMsgToWorkerOrThrowExc(Worker worker, String msg) throws Exception{
+        try(Socket workerSocket = new Socket(worker.getHost(), worker.getPort())){
+            BufferedReader input = new BufferedReader(new InputStreamReader(workerSocket.getInputStream()));
+            PrintWriter output = new PrintWriter(workerSocket.getOutputStream(), true);
+
+            output.println(msg);
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while((line = input.readLine()) != null){
+                if(line.equals("END")) break;
+                sb.append(line).append("\n");
+            }
+            return sb.toString();
+        }
+        // IO Exception propagates to caller and caller decides how to handle :)
+    }
+
     private static String gatherAllGamesFromWorkers(String inputString){
-
-        // USE REDUCER FOR THIS GATHERING
-
         StringBuilder gameNames = new StringBuilder();
+        Set<String> seenGames = new HashSet<>();
 
-        for (Worker worker: workers){
-            String workerResponse = forwardMsgToWorker(worker,inputString );
-            if (workerResponse == null || workerResponse.isBlank())continue;
+        for (Worker worker : workers){
+            if (!isWorkerAlive(worker)) {
+                System.out.println("[MasterServer] Worker " + worker + " is down, skipping SHOW_ALL_GAMES");
+                continue;
+            }
+            String workerResponse = forwardMsgToWorker(worker, inputString);
+            if (workerResponse == null || workerResponse.isBlank()) continue;
 
             for(String ln : workerResponse.split("\n")){
                 ln = ln.trim();
-                if( !ln.isBlank()) gameNames.append(ln).append("\n");
+                if (ln.isBlank()) continue;
+
+                // Deduplicate by gameName (handles replication duplicates)
+                // Line format: "GameName: X | Provider: ..."
+                String gameKey = extractGameNameFromLine(ln);
+                if (gameKey != null && seenGames.contains(gameKey)) continue;
+                if (gameKey != null) seenGames.add(gameKey);
+
+                gameNames.append(ln).append("\n");
             }
         }
-        return gameNames.length() ==0 ? "NO GAMES YET!\n" :  gameNames.toString();
+        return gameNames.length() == 0 ? "NO GAMES YET!\n" : gameNames.toString();
+    }
+
+    // Extracts the gameName key from a SHOW_ALL_GAMES response line for deduplication
+    private static String extractGameNameFromLine(String line) {
+        if (!line.startsWith("GameName: ")) return null;
+        int pipe = line.indexOf(" | ");
+        String name = pipe >= 0 ? line.substring("GameName: ".length(), pipe) : line.substring("GameName: ".length());
+        return name.trim().toLowerCase();
     }
 
     private static void gatherProviderProfit(String providerName, String reducerHost, int reducerPort, PrintWriter output){
@@ -567,67 +667,107 @@ public class MasterServer {
         // jobId tag so the Reducer can separate this specific request from other request that run at the same time in him
         String jobId = UUID.randomUUID().toString();
 
-        // How many workers should reach the reducer
-        int expectedWorkers = workers.size();
-
-        // 1. Map: ask all workers to send partials to reducer
-        for(Worker worker: workers){
-            forwardMsgToWorker(worker, "MAP_PROVIDER_PROFIT "+jobId +"|" + providerName +"|" +reducerHost +"|"+reducerPort+"|"+ expectedWorkers);
+        // Determine alive workers and correct expectedN
+        List<Worker> aliveWorkers = new ArrayList<>();
+        for (Worker w : workers) {
+            if (isWorkerAlive(w)) {
+                aliveWorkers.add(w);
+            } else {
+                System.out.println("[MasterServer] Worker " + w + " is down, skipping PROVIDER_PROFIT MapReduce");
+            }
         }
 
-        // 2. Wait for reducer to push REDUCE_RESULT back here (here to MasterServer)
+        if(aliveWorkers.isEmpty()){
+            output.println("ERROR No workers available for PROVIDER_PROFIT");
+            output.println("END");
+            return;
+        }
+        int expectedWorkers = aliveWorkers.size();
+        int totalWorkers = workers.size();
+
+        // MAP: each alive worker get its global index so it can filter primary only games
+        for (Worker w : aliveWorkers) {
+            int workerIndex = workers.indexOf(w);
+            forwardMsgToWorker(w, "MAP_PROVIDER_PROFIT " + jobId + "|" + providerName + "|"
+                    + reducerHost + "|" + reducerPort + "|" + expectedWorkers
+                    + "|" + workerIndex + "|" + totalWorkers);
+        }
+
         String key = "PROVIDER_PROFIT|"+jobId;
         String finalJson;
 
-        synchronized (reduceLock){
-            while(!pendingReduceResults.containsKey(key)) {
-                try {
-                    reduceLock.wait();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
+        long deadline = System.currentTimeMillis() + 15_000; // 15s timeout
+        synchronized (reduceLock) {
+            while (!pendingReduceResults.containsKey(key)) {
+                long remain = deadline - System.currentTimeMillis();
+                if (remain <= 0) break;
+                try { reduceLock.wait(remain); }
+                catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
             }
             finalJson = pendingReduceResults.remove(key);
         }
+
         if (finalJson == null){
             output.println("ERROR: No reduce result for finding provider profit!");
             output.println("END");
             return;
         }
-        output.println(finalJson); //JSON includes per-game + Total
+
+        output.println(finalJson);
         output.println("END");
     }
 
     private static void gatherPlayerProfit(String userId, String reducerHost, int reducerPort, PrintWriter output){
         String jobId = UUID.randomUUID().toString();
 
-        int expectedWorkers = workers.size();
-        for(Worker worker: workers){
-            forwardMsgToWorker(worker, "MAP_PLAYER_PROFIT "+ jobId+"|"+userId+"|"+reducerHost+"|"+reducerPort+"|"+expectedWorkers);
+        List<Worker> aliveWorkers = new ArrayList<>();
+
+        for (Worker w : workers) {
+            if (isWorkerAlive(w)) {
+                aliveWorkers.add(w);
+            } else {
+                System.out.println("[MasterServer] Worker " + w + " is down, skipping PLAYER_PROFIT MapReduce");
+            }
         }
 
-        String key= "PLAYER_PROFIT|"+ jobId;
+        if (aliveWorkers.isEmpty()) {
+            output.println("ERROR No workers available for PLAYER_PROFIT");
+            output.println("END");
+            return;
+        }
+
+        int expectedWorkers = aliveWorkers.size();
+        int totalWorkers = workers.size();
+
+        for (Worker w : aliveWorkers) {
+            int workerIndex = workers.indexOf(w);
+            forwardMsgToWorker(w, "MAP_PLAYER_PROFIT " + jobId + "|" + userId + "|"
+                    + reducerHost + "|" + reducerPort + "|" + expectedWorkers
+                    + "|" + workerIndex + "|" + totalWorkers);
+        }
+
+        String key = "PLAYER_PROFIT|" + jobId;
         String finalJson;
-        synchronized (reduceLock){
-            while(!pendingReduceResults.containsKey(key)) {
-                try {
-                    reduceLock.wait();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
+
+        long deadline = System.currentTimeMillis() + 15_000; // 15s timeout
+        synchronized (reduceLock) {
+            while (!pendingReduceResults.containsKey(key)) {
+                long remain = deadline - System.currentTimeMillis();
+                if (remain <= 0) break;
+                try { reduceLock.wait(remain); }
+                catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
             }
             finalJson = pendingReduceResults.remove(key);
         }
+
         if (finalJson == null){
             output.println("ERROR: No reduce result for finding player profit!");
             output.println("END");
             return;
         }
-        output.println(finalJson); //JSON includes per-game + Total
-        output.println("END");
 
+        output.println(finalJson);
+        output.println("END");
     }
 
     // --- Helping Methods for Player Logic --- //
@@ -642,64 +782,55 @@ public class MasterServer {
     private static String fetchAllAvailableGames(){
 
         // Use unique id so we can match Reducer result to this request
-        // (many players / managers are requesting different things simuteniously)
+        // (many players / managers are requesting different things simultaneously)
         String jobId = UUID.randomUUID().toString();
-
-        // Reducer must know how many workers will forward him results
-        int expectedNWorkers = workers.size();
-
-        // MAP: Ask all workers to send their active games to reducer
-        for(Worker worker: workers){
-            // Re-use MAP_SEARCH with accept all filters:
-            // jobId|minStars|betCategory|risk|reducerHost|reducerPost|expectedNworkers
-            forwardMsgToWorker(worker, "MAP_SEARCH "+jobId+"|0|ANY|ANY|"+reducerHost+"|"+reducerPort+"|"+expectedNWorkers);
+        // Only send to alive workers, adjust expectedN
+        List<Worker> aliveWorkers = new ArrayList<>();
+        for (Worker w : workers) {
+            if (isWorkerAlive(w)) {
+                aliveWorkers.add(w);
+            } else {
+                System.out.println("[MasterServer] Worker " + w + " is down, skipping FETCH_ALL MapReduce");
+            }
         }
 
-        // Waiting for Reducer's Result
-        String key = "SEARCH|" +jobId;
+        if (aliveWorkers.isEmpty()) {
+            return "ERROR No workers available\n";
+        }
+
+        int expectedNWorkers = aliveWorkers.size();
+
+        for (Worker worker : aliveWorkers) {
+            forwardMsgToWorker(worker, "MAP_SEARCH " + jobId + "|0|ANY|ANY|" + reducerHost + "|" + reducerPort + "|" + expectedNWorkers);
+        }
+
+        String key = "SEARCH|" + jobId;
         String finalResult;
 
-        // Safety net: If reducer fails or network error occurs -> timeout (we dont block it forever)
-        long deadline = System.currentTimeMillis()+10_000; // 40 seconds timeout
+        long deadline = System.currentTimeMillis() + 10_000;
 
-        // reduceLock protects the shared map (pendingReduceResults)
-        // because multiple threads access it
-        // - client threads waiting here
-        // - reducer callback threads writing results in handleReducerPush()
         synchronized (reduceLock) {
-
-            // while the reducer hasn't delivered the result for this jobId, wait
             while (!pendingReduceResults.containsKey(key)) {
-
-                // compute remaining time till timeout
                 long remain = deadline - System.currentTimeMillis();
-
-                // If timeout is reached, stop waiting
                 if (remain <= 0) break;
-
                 try {
-                    // Wait releases the lock temporarily and sleeps until:
-                    // - notified by reducer's callback thread (notifyAll)
-                    // - or timeout expires
                     reduceLock.wait(remain);
                 } catch (InterruptedException e) {
-                    // If the thread is interrupted, show interrupt flag and stop waiting
                     Thread.currentThread().interrupt();
                     break;
                 }
             }
-
-            // Take the result and remove it from the map so it doesn't accumulate in memory
             finalResult = pendingReduceResults.remove(key);
         }
+
         if (finalResult == null) {
             return "ERROR FETCH_ALL_AVAILABLE_GAMES timeout (Reducer did not push result)\n";
         }
 
-        // If nothing arrived (timeout/error), return empty message
         if (finalResult.isBlank()) {
             return "There are no available games yet!\n";
         }
+
         return finalResult;
 
     }
@@ -721,10 +852,27 @@ public class MasterServer {
 
         // assign unique id so reducer can separate different searches
         String jobId = UUID.randomUUID().toString();
-        int expectedWorkers = workers.size();
 
-        // MAP: broadcast to all workers
-        for (Worker worker : workers) {
+        // Keep only alive workers
+        List<Worker> aliveWorkers = new ArrayList<>();
+        for (Worker w : workers) {
+            if (isWorkerAlive(w)) {
+                aliveWorkers.add(w);
+            } else {
+                System.out.println("[MasterServer] Worker " + w + " is down, skipping SEARCH MapReduce");
+            }
+        }
+
+        if (aliveWorkers.isEmpty()) {
+            output.println("ERROR No workers available");
+            output.println("END");
+            return;
+        }
+
+        int expectedWorkers = aliveWorkers.size();
+
+        // MAP: broadcast to alive workers only
+        for (Worker worker : aliveWorkers) {
             forwardMsgToWorker(worker,
                     "MAP_SEARCH " + jobId + "|" + minStars + "|" + betCat + "|" + risk + "|" +
                             reducerHost + "|" + reducerPort + "|" + expectedWorkers
@@ -735,9 +883,7 @@ public class MasterServer {
         String key = "SEARCH|" + jobId;
         String finalResult;
 
-
         long deadline = System.currentTimeMillis() + 10_000; // 10 sec
-
 
         synchronized (reduceLock) {
             while (!pendingReduceResults.containsKey(key)) {
@@ -813,24 +959,25 @@ public class MasterServer {
             playerBalance.removeBalance(new BigDecimal(bet));
         }
 
+        // Try primary first, then replicas on failure
+        List<Worker> replicas = getWorkersForGame(gameName);
+        String workerResponse = null;
+        Worker usedWorker = null;
 
-        // forward request to worker
-        Worker worker = chooseWorker(gameName);
-
-        String workerResponse;
-        try{
-            workerResponse = forwardMsgToWorker(worker, "PLAY "+playerId+"|"+gameName+"|"+bet);
-        }catch (Exception e) {
-            // refund on worker if communication failure
-            playerBalance.addBalance(betAmount);
-            output.println("ERROR Failed to contact worker: " + e.getMessage());
-            output.println("END");
-            return;
+        for (Worker w : replicas) {
+            try {
+                workerResponse = forwardMsgToWorkerOrThrowExc(w, "PLAY " + playerId + "|" + gameName + "|" + bet);
+                usedWorker = w;
+                break; // primary worked, stop here
+            } catch (Exception e) {
+                System.out.println("[MasterServer] Worker " + w + " failed for PLAY, trying replica: " + e.getMessage());
+            }
         }
 
-        if (workerResponse.isBlank()) {
+        if (workerResponse == null) {
+            // All workers unreachable — refund
             playerBalance.addBalance(betAmount);
-            output.println("ERROR Empty response from worker");
+            output.println("ERROR All workers unreachable for PLAY");
             output.println("END");
             return;
         }
@@ -872,6 +1019,18 @@ public class MasterServer {
 
                 if (payout.compareTo(BigDecimal.ZERO) > 0) {
                     playerBalance.addBalance(payout);
+                }
+
+                // SYNC_PLAY: update all other replicas without calling SRNG
+                final String payoutStr = payout.toPlainString();
+                final Worker handledBy = usedWorker;
+                for (Worker w : replicas) {
+                    if (w == handledBy) continue; // skip the one that handled the PLAY
+                    try {
+                        forwardMsgToWorkerOrThrowExc(w, "SYNC_PLAY " + gameName + "|" + playerId + "|" + bet + "|" + payoutStr);
+                    } catch (Exception ex) {
+                        System.out.println("[MasterServer] SYNC_PLAY failed for replica " + w + ": " + ex.getMessage());
+                    }
                 }
 
 
@@ -920,13 +1079,22 @@ public class MasterServer {
         String gameName = parts[1].trim();
         int stars = Integer.parseInt(parts[2].trim());
 
-        // Send it to its stored worker
-        Worker worker  = chooseWorker(gameName);
+        // Send RATE to ALL replicas (same command, no SRNG involved)
+        List<Worker> replicas = getWorkersForGame(gameName);
+        String primaryResponse = null;
 
-        String workerResponse = forwardMsgToWorker(worker, "RATE "+playerId+"|"+gameName+"|"+stars);
+        for (int i = 0; i < replicas.size(); i++) {
+            Worker w = replicas.get(i);
+            try {
+                String resp = forwardMsgToWorkerOrThrowExc(w, "RATE " + playerId + "|" + gameName + "|" + stars);
+                if (i == 0) primaryResponse = resp;
+            } catch (Exception e) {
+                System.out.println("[MasterServer] WARNING: RATE failed for worker " + w + ": " + e.getMessage());
+            }
+        }
 
-        // Send the response to Player
-        for(String ln: workerResponse.split("\n")){
+        String responseToShow = primaryResponse != null ? primaryResponse : "ERROR All workers unreachable\n";
+        for(String ln: responseToShow.split("\n")){
             if (!ln.isBlank()) output.println(ln);
         }
         output.println("END");
@@ -1000,29 +1168,32 @@ public class MasterServer {
         output.println("END");
     }
 
-    /*
-    private static void handleCanUserPlayRequest(String inputString, PrintWriter output){
 
-        // "CAN_USER_PLAY "+playerId+"|"+gameName;
-        String payload = inputString.substring("CAN_USER_PLAY ".length()).trim();
-        String[] parts = payload.split("\\|");
+    // Active replication helping methods
+    private static List<Worker> getWorkersForGame(String gameName){
+        String key = gameName.trim().toLowerCase();
 
-        String userId = parts[1].trim().toLowerCase();
-        if (userId.isBlank()){
-            output.println("Error, userId is Empty!");
-            output.println("END");
-            return;
+        int hash = Math.floorMod(key.hashCode(), workers.size());
+        int count = Math.min(REPLICATION_FACTOR, workers.size());
+
+        List<Worker> results = new ArrayList<>();
+
+        for(int i=0; i< count; i++){
+            results.add(workers.get((hash+i) % workers.size()));
         }
-        String gameName = parts[2].trim().toLowerCase();
-        if(gameName.isBlank()){
-            output.println("Error, gameName is Empty!");
-            output.println("END");
-            return;
-        }
-        // Send the request to Worker so he will send back the min bet
-        Worker worker = chooseWorker(worker, "FIND_MIN_")
-    }*/
+        return results;
+    }
 
+    // check worker if alive
+    private static boolean isWorkerAlive(Worker worker){
+        try(Socket s = new Socket()){
+            s.connect(new java.net.InetSocketAddress(worker.getHost(), worker.getPort()), 2000);
+            return true;
+        }catch (Exception e){
+            return false;
+        }
+    }
+    
     // ------------------------------------------------------------------------------  //
     // ------------------------------------------------------------------------------  //
     // ------------------------------------------------------------------------------  //
@@ -1030,7 +1201,6 @@ public class MasterServer {
     // ------------------------------------------------------------------------------  //
 
     // Helping methods for connection with ReducerServer
-    // Not fully implemented yet!
     private static void startReducerCallbackServer(int port){
         try(ServerSocket serverSocket = new ServerSocket(port)){
             while(true){
@@ -1138,10 +1308,6 @@ public class MasterServer {
         }catch (Exception e){
             System.out.println("[MasterServer] handleReducerPush failed: " + e.getMessage());
         }
-
     }
-
-
-
 }
 

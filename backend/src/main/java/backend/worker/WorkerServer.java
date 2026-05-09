@@ -79,15 +79,23 @@ public class WorkerServer {
             if (inputString.startsWith("ADD_NEW_GAME ")){
                 handleAddNewGame(inputString, port, output);
                 return;
-
+            }else if (inputString.startsWith("ADD_NEW_GAME_REPLICA ")) {
+                handleAddNewGameReplica(inputString, output);
+                return;
             }else if(inputString.startsWith("SHOW_ALL_GAMES")){
                 handleShowAllGames(output);
                 return;
             }else if(inputString.startsWith("MODIFY_GAME ")){
                 handleModifyGame(inputString,output);
                 return;
+            } else if (inputString.startsWith("DELETE_EXISTING_GAME_REPLICA ")) {
+                handleSetGameVisibilityInactiveReplica(inputString, output);
+                return;
             } else if (inputString.startsWith("DELETE_EXISTING_GAME ")) {
                 handleSetGameVisibilityInactive(inputString,output);
+                return;
+            } else if (inputString.startsWith("MAKE_VISIBLE_REPLICA ")) {
+                handleSetGameVisibilityActiveReplica(inputString, output);
                 return;
             } else if (inputString.startsWith("MAKE_VISIBLE ")) {
                 handleSetGameVisibilityActive(inputString,output);
@@ -107,6 +115,9 @@ public class WorkerServer {
             }
             else if(inputString.startsWith("RATE ")){
                 handleGameRate(inputString,output);
+                return;
+            }else if(inputString.startsWith("SYNC_PLAY ")) {
+                handleSyncPlay(inputString, output);
                 return;
             }else if(inputString.startsWith("PLAY ")){
                 handlePlayRequest(inputString,output);
@@ -176,6 +187,28 @@ public class WorkerServer {
                 + " | total Games Stored in this Worker: " + total;
 
         output.println(reply);
+        output.println("END");
+    }
+
+    // Replica-only: stores game data WITHOUT registering to SRNG (primary already did that)
+    private static void handleAddNewGameReplica(String inputString, PrintWriter output) throws Exception {
+        String b64 = inputString.substring("ADD_NEW_GAME_REPLICA ".length()).trim();
+        String json = new String(java.util.Base64.getDecoder().decode(b64), java.nio.charset.StandardCharsets.UTF_8);
+
+        Game game = WorkerCustomJSONParser.parseGameJSON(json);
+        String gameNameKey = game.getGameName().trim().toLowerCase();
+
+        synchronized (gamesByName) {
+            if (gamesByName.containsKey(gameNameKey)) {
+                output.println("ERROR Game already exists as replica: " + game.getGameName());
+                output.println("END");
+                return;
+            }
+            gamesByName.put(gameNameKey, new GameState(game, true));
+        }
+
+        output.println("STORED_REPLICA");
+        output.println("Replica stored: " + game.getGameName());
         output.println("END");
     }
 
@@ -302,7 +335,7 @@ public class WorkerServer {
         }
 
     }
-    
+
     private static void handleSetGameVisibilityInactive (String inputString, PrintWriter output){
         String gameName = inputString.substring("DELETE_EXISTING_GAME ".length()).toLowerCase().trim();
 
@@ -336,6 +369,29 @@ public class WorkerServer {
         output.println("Visibility Changed for: "+gameName+" to: " + gameState.isActive());
         output.println("END");
 
+    }
+
+    // Replica-only: sets game inactive WITHOUT deregistering from SRNG
+    private static void handleSetGameVisibilityInactiveReplica(String inputString, PrintWriter output) {
+        String gameName = inputString.substring("DELETE_EXISTING_GAME_REPLICA ".length()).toLowerCase().trim();
+
+        if (gameName.isBlank()) {
+            output.println("ERROR gameName is required!");
+            output.println("END");
+            return;
+        }
+        GameState gameState;
+        synchronized (gamesByName) {
+            gameState = gamesByName.get(gameName);
+        }
+        if (gameState == null) {
+            output.println("Error, no game found: " + gameName);
+            output.println("END");
+            return;
+        }
+        gameState.setVisibilityInactive();
+        output.println("REPLICA: Visibility set inactive for: " + gameName);
+        output.println("END");
     }
 
     private static void handleSetGameVisibilityActive(String inputString, PrintWriter output){
@@ -382,14 +438,85 @@ public class WorkerServer {
         return;
     }
 
+    // Replica-only: sets game active WITHOUT re-registering to SRNG (primary does that)
+    private static void handleSetGameVisibilityActiveReplica(String inputString, PrintWriter output) {
+        String gameName = inputString.substring("MAKE_VISIBLE_REPLICA ".length()).trim().toLowerCase();
+        if (gameName.isBlank()) {
+            output.println("Error, GameName is empty!");
+            output.println("END");
+            return;
+        }
+        GameState gameState;
+        synchronized (gamesByName) {
+            gameState = gamesByName.get(gameName);
+        }
+        if (gameState == null) {
+            output.println("Error, no Game found: " + gameName);
+            output.println("END");
+            return;
+        }
+        gameState.setVisibilityActive();
+        output.println("REPLICA: Game " + gameName + " is now visible!");
+        output.println("END");
+    }
+
+    // SYNC_PLAY: called by Master to update replica state after primary executed a PLAY.
+    // Updates profit/loss and bet history WITHOUT calling SRNG.
+    // Protocol: SYNC_PLAY gameName|playerId|bet|payout
+    private static void handleSyncPlay(String inputString, PrintWriter output) {
+        String payload = inputString.substring("SYNC_PLAY ".length()).trim();
+        String[] parts = payload.split("\\|");
+
+        if (parts.length != 4) {
+            output.println("ERROR bad SYNC_PLAY format. Expected: gameName|playerId|bet|payout");
+            output.println("END");
+            return;
+        }
+
+        String gameName = parts[0].trim().toLowerCase();
+        String playerId = parts[1].trim();
+        BigDecimal bet, payout;
+
+        try {
+            bet    = new BigDecimal(parts[2].trim());
+            payout = new BigDecimal(parts[3].trim());
+        } catch (NumberFormatException e) {
+            output.println("ERROR SYNC_PLAY invalid numbers: " + e.getMessage());
+            output.println("END");
+            return;
+        }
+
+        GameState gameState;
+        synchronized (gamesByName) {
+            gameState = gamesByName.get(gameName);
+        }
+
+        if (gameState == null) {
+            output.println("ERROR SYNC_PLAY game not found: " + gameName);
+            output.println("END");
+            return;
+        }
+
+        // Mirror the same state update that primary did (no SRNG call)
+        BigDecimal houseDelta = bet.subtract(payout);
+        synchronized (gameState) {
+            gameState.addProfitLoss(houseDelta);
+            BetRecord betRecord = new BetRecord(playerId, gameName, bet, payout, 0);
+            gameState.addBetRecord(betRecord);
+        }
+
+        output.println("SYNC_ACK");
+        output.println("END");
+    }
+
     private static void handleProviderProfit(String inputString, int port, PrintWriter output) throws Exception{
 
-        //+jobId +"|" + providerName +"|" +reducerHost +"|"+reducerPost+"|"+ expectedWorkers
+        // New format: jobId|providerName|reducerHost|reducerPort|expectedN|workerIndex|totalWorkers
         String payload = inputString.substring("MAP_PROVIDER_PROFIT ".length()).trim();
         String[] parts = payload.split("\\|");
 
-        if(parts.length!=5){
-            output.println("ERROR bad format. Expected jobId|providerName|reducerHost|reducerPost|expectedN");
+        if(parts.length != 7){
+            output.println("ERROR bad format. Expected jobId|providerName|reducerHost|reducerPort|expectedN|workerIndex|totalWorkers");
             output.println("END");
             return;
         }
@@ -398,6 +525,8 @@ public class WorkerServer {
         String reducerHost = parts[2].trim();
         int reducerPort = Integer.parseInt(parts[3].trim());
         int expectedN = Integer.parseInt(parts[4].trim());
+        int workerIndex = Integer.parseInt(parts[5].trim());
+        int totalWorkers = Integer.parseInt(parts[6].trim());
 
         // Connect to reducer
         try (Socket s = new Socket(reducerHost, reducerPort);
@@ -408,8 +537,15 @@ public class WorkerServer {
 
             synchronized (gamesByName) {
                 for (GameState gamestate : gamesByName.values()) {
+                    String gameKey = gamestate.getGame().getGameName().trim().toLowerCase();
+
+                    // Only report games where THIS worker is the PRIMARY
+                    // Primary index = H(gameName) % totalWorkers
+                    int primaryIdx = Math.floorMod(gameKey.hashCode(), totalWorkers);
+                    if (primaryIdx != workerIndex) continue; // skip replica games
+
                     if (gamestate.getGame().getProviderName().equalsIgnoreCase(providerName)) {
-                        String gameName =gamestate.getGame().getGameName();
+                        String gameName = gamestate.getGame().getGameName();
                         BigDecimal profitLoss = gamestate.getTotalLossProfit();
                         writer.println(gameName + "|" + profitLoss);
                     }
@@ -428,17 +564,15 @@ public class WorkerServer {
             output.println("ERROR: MAP_PROVIDER_PROFIT failed: "+e.getMessage());
             output.println("END");
         }
-
     }
 
     private static void handlePlayerProfit(String inputString, int port, PrintWriter output){
-        //+userId +"|" + userId +"|" +reducerHost +"|"+reducerPost+"|"+ expectedWorkers
-
+        // New format: jobId|userId|reducerHost|reducerPort|expectedN|workerIndex|totalWorkers
         String payload = inputString.substring("MAP_PLAYER_PROFIT ".length()).trim();
         String[] parts = payload.split("\\|");
 
-        if(parts.length != 5){
-            output.println("ERROR bad format. Expected jobId|userId|reducerHost|reducerPost|expectedN");
+        if(parts.length != 7){
+            output.println("ERROR bad format. Expected jobId|userId|reducerHost|reducerPort|expectedN|workerIndex|totalWorkers");
             output.println("END");
             return;
         }
@@ -447,13 +581,15 @@ public class WorkerServer {
         String reducerHost = parts[2].trim();
         int reducerPort = Integer.parseInt(parts[3].trim());
         int expectedN = Integer.parseInt(parts[4].trim());
+        int workerIndex = Integer.parseInt(parts[5].trim());
+        int totalWorkers = Integer.parseInt(parts[6].trim());
 
         // Connect to reducer
         try(Socket s = new Socket(reducerHost, reducerPort);
             BufferedReader reader = new BufferedReader(new InputStreamReader(s.getInputStream()));
             PrintWriter writer = new PrintWriter(s.getOutputStream(), true))
         {
-            writer.println("MAP_PLAYER_PROFIT "+ jobId +" "+userId + " "+ expectedN);
+            writer.println("MAP_PLAYER_PROFIT " + jobId + " " + userId + " " + expectedN);
 
             List<GameState> snapshot;
             synchronized (gamesByName) {
@@ -461,6 +597,11 @@ public class WorkerServer {
             }
 
             for(GameState gameState : snapshot){
+                String gameKey = gameState.getGame().getGameName().trim().toLowerCase();
+
+                // Only report bets from games where THIS worker is the PRIMARY
+                int primaryIdx = Math.floorMod(gameKey.hashCode(), totalWorkers);
+                if (primaryIdx != workerIndex) continue; // skip replica games
 
                 for(BetRecord br : gameState.getBetHistorySnapshot()){
                     if(br.getPlayerId().equalsIgnoreCase(userId)){
@@ -468,9 +609,7 @@ public class WorkerServer {
                         writer.println(playerDelta);
                     }
                 }
-
             }
-
 
             writer.println("END");
 
@@ -507,7 +646,7 @@ public class WorkerServer {
         BigDecimal totalProfitLoss = gameState.getTotalLossProfit();
 
         output.println("GAME_PROFIT_LOSS|"+gameState.getGame().getGameName()+"|"
-        +gameState.getGame().getProviderName()+"|"+
+                +gameState.getGame().getProviderName()+"|"+
                 totalProfitLoss);
 
         output.println("END");
