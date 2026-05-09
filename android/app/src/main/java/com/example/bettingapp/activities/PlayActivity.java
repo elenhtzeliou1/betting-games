@@ -83,6 +83,7 @@ public class PlayActivity extends AppCompatActivity {
 
     private MasterConnection masterConnection;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private int heroTransitionId = 0;
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -185,8 +186,14 @@ public class PlayActivity extends AppCompatActivity {
     private enum HeroState { DEFAULT, LOADING, RESULT }
 
     private void transitionHero(HeroState state, BetResult result) {
+        final int transitionId = ++heroTransitionId;
         final View nextView = viewForState(state);
         final int  nextBg   = bgForResult(state, result);
+
+        for (View v : new View[]{heroDefault, heroLoading, heroResult}) {
+            v.animate().setListener(null);
+            v.animate().cancel();
+        }
 
         if (state == HeroState.RESULT && result != null) {
             populateResultViews(result);
@@ -201,8 +208,10 @@ public class PlayActivity extends AppCompatActivity {
                         .setDuration(FADE_MS)
                         .setListener(new AnimatorListenerAdapter() {
                             @Override public void onAnimationEnd(Animator a) {
-                                toHide.setVisibility(View.GONE);
-                                toHide.setAlpha(1f);
+                                if (transitionId == heroTransitionId) {
+                                    toHide.setVisibility(View.GONE);
+                                    toHide.setAlpha(1f);
+                                }
                             }
                         }).start();
             }

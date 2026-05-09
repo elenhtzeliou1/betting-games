@@ -12,7 +12,6 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.TextView;
 
@@ -154,8 +153,7 @@ public class GameBottomSheetFragment extends BottomSheetDialogFragment {
     @Override
     public void onStart() {
         super.onStart();
-        BottomSheetDialog dialog = (BottomSheetDialog) requireDialog();
-        FrameLayout bottomSheet = dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+        View bottomSheet = (View) requireView().getParent();
         if (bottomSheet == null) return;
 
         int halfScreen = getResources().getDisplayMetrics().heightPixels / 2;
