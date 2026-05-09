@@ -12,10 +12,7 @@ import java.io.PrintWriter;
 import java.math.BigDecimal;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class WorkerServer {
 
@@ -93,6 +90,9 @@ public class WorkerServer {
                 return;
             } else if (inputString.startsWith("DELETE_EXISTING_GAME ")) {
                 handleSetGameVisibilityInactive(inputString,output);
+                return;
+            } else if (inputString.startsWith("MAKE_VISIBLE_PROMOTED ")) {
+                handleSetGameVisibilityActivePromoted(inputString, output);
                 return;
             } else if (inputString.startsWith("MAKE_VISIBLE_REPLICA ")) {
                 handleSetGameVisibilityActiveReplica(inputString, output);
@@ -410,21 +410,17 @@ public class WorkerServer {
             output.println("END");
             return;
         }
-        String realGameName;
-        String secret;
         synchronized (gameState){
             if(gameState.isActive()){
                 output.println("Game: "+gameName+" is already Visible!");
                 output.println("END");
                 return;
             }
-            realGameName = gameState.getGame().getGameName();
-            secret = gameState.getGame().getHashKey();
         }
         // Start SRNG first
         try{
             // CHANGE BUFFER SIZE
-            registerNewGameToSRNG(gameState.getGame().getGameName(), gameState.getGame().getHashKey(), 10);
+            ensureGameRegisteredToSRNG(gameState.getGame().getGameName(), gameState.getGame().getHashKey(), 10);
         }catch (Exception e){
             output.println("ERROR Failed to Register the game to SRNG: "+e.getMessage());
             output.println("END");
@@ -436,6 +432,47 @@ public class WorkerServer {
         output.println("Game: "+gameName+" is now visivle to players! ");
         output.println("END");
         return;
+    }
+
+    // Promoted replica: the original primary is unavailable, so this worker becomes the active worker
+    // for the game and connects to the same SRNG using the stored secret.
+    private static void handleSetGameVisibilityActivePromoted(String inputString, PrintWriter output) {
+        String gameName = inputString.substring("MAKE_VISIBLE_PROMOTED ".length()).trim().toLowerCase();
+        if (gameName.isBlank()) {
+            output.println("Error, GameName is empty!");
+            output.println("END");
+            return;
+        }
+
+        GameState gameState;
+        synchronized (gamesByName) {
+            gameState = gamesByName.get(gameName);
+        }
+        if (gameState == null) {
+            output.println("Error, no Game found: " + gameName);
+            output.println("END");
+            return;
+        }
+
+        synchronized (gameState) {
+            if (gameState.isActive()) {
+                output.println("PROMOTED: Game " + gameName + " is already visible!");
+                output.println("END");
+                return;
+            }
+        }
+
+        try {
+            ensureGameRegisteredToSRNG(gameState.getGame().getGameName(), gameState.getGame().getHashKey(), 10);
+        } catch (Exception e) {
+            output.println("ERROR Promoted worker failed to register game to SRNG: " + e.getMessage());
+            output.println("END");
+            return;
+        }
+
+        gameState.setVisibilityActive();
+        output.println("PROMOTED: Game " + gameName + " is now visible and connected to SRNG!");
+        output.println("END");
     }
 
     // Replica-only: sets game active WITHOUT re-registering to SRNG (primary does that)
@@ -515,8 +552,8 @@ public class WorkerServer {
         String payload = inputString.substring("MAP_PROVIDER_PROFIT ".length()).trim();
         String[] parts = payload.split("\\|");
 
-        if(parts.length != 7){
-            output.println("ERROR bad format. Expected jobId|providerName|reducerHost|reducerPort|expectedN|workerIndex|totalWorkers");
+        if(parts.length != 8){
+            output.println("ERROR bad format. Expected jobId|providerName|reducerHost|reducerPort|expectedN|workerIndex|totalWorkers|aliveIndices");
             output.println("END");
             return;
         }
@@ -527,6 +564,12 @@ public class WorkerServer {
         int expectedN = Integer.parseInt(parts[4].trim());
         int workerIndex = Integer.parseInt(parts[5].trim());
         int totalWorkers = Integer.parseInt(parts[6].trim());
+
+        // Parse alive worker indices e.g. "0,2" → {0, 2}
+        Set<Integer> aliveIndices = new HashSet<>();
+        for (String idx : parts[7].trim().split(",")) {
+            try { aliveIndices.add(Integer.parseInt(idx.trim())); } catch (Exception ignore) {}
+        }
 
         // Connect to reducer
         try (Socket s = new Socket(reducerHost, reducerPort);
@@ -539,10 +582,7 @@ public class WorkerServer {
                 for (GameState gamestate : gamesByName.values()) {
                     String gameKey = gamestate.getGame().getGameName().trim().toLowerCase();
 
-                    // Only report games where THIS worker is the PRIMARY
-                    // Primary index = H(gameName) % totalWorkers
-                    int primaryIdx = Math.floorMod(gameKey.hashCode(), totalWorkers);
-                    if (primaryIdx != workerIndex) continue; // skip replica games
+                    if (!shouldReportGame(gameKey, workerIndex, totalWorkers, aliveIndices)) continue;
 
                     if (gamestate.getGame().getProviderName().equalsIgnoreCase(providerName)) {
                         String gameName = gamestate.getGame().getGameName();
@@ -567,12 +607,12 @@ public class WorkerServer {
     }
 
     private static void handlePlayerProfit(String inputString, int port, PrintWriter output){
-        // New format: jobId|userId|reducerHost|reducerPort|expectedN|workerIndex|totalWorkers
+        // Format: jobId|userId|reducerHost|reducerPort|expectedN|workerIndex|totalWorkers|aliveIndices
         String payload = inputString.substring("MAP_PLAYER_PROFIT ".length()).trim();
         String[] parts = payload.split("\\|");
 
-        if(parts.length != 7){
-            output.println("ERROR bad format. Expected jobId|userId|reducerHost|reducerPort|expectedN|workerIndex|totalWorkers");
+        if(parts.length != 8){
+            output.println("ERROR bad format. Expected jobId|userId|reducerHost|reducerPort|expectedN|workerIndex|totalWorkers|aliveIndices");
             output.println("END");
             return;
         }
@@ -583,6 +623,11 @@ public class WorkerServer {
         int expectedN = Integer.parseInt(parts[4].trim());
         int workerIndex = Integer.parseInt(parts[5].trim());
         int totalWorkers = Integer.parseInt(parts[6].trim());
+
+        Set<Integer> aliveIndices = new HashSet<>();
+        for (String idx : parts[7].trim().split(",")) {
+            try { aliveIndices.add(Integer.parseInt(idx.trim())); } catch (Exception ignore) {}
+        }
 
         // Connect to reducer
         try(Socket s = new Socket(reducerHost, reducerPort);
@@ -599,9 +644,7 @@ public class WorkerServer {
             for(GameState gameState : snapshot){
                 String gameKey = gameState.getGame().getGameName().trim().toLowerCase();
 
-                // Only report bets from games where THIS worker is the PRIMARY
-                int primaryIdx = Math.floorMod(gameKey.hashCode(), totalWorkers);
-                if (primaryIdx != workerIndex) continue; // skip replica games
+                if (!shouldReportGame(gameKey, workerIndex, totalWorkers, aliveIndices)) continue;
 
                 for(BetRecord br : gameState.getBetHistorySnapshot()){
                     if(br.getPlayerId().equalsIgnoreCase(userId)){
@@ -909,6 +952,26 @@ public class WorkerServer {
         }
     }
 
+    private static boolean shouldReportGame(String gameKey, int myIndex, int totalWorkers, Set<Integer> aliveIndices) {
+        int primaryIdx = Math.floorMod(gameKey.hashCode(), totalWorkers);
+
+        // Case 1: I am the primary
+        if (primaryIdx == myIndex) return true;
+
+        // Case 2: Primary is down — am I the first alive replica?
+        if (!aliveIndices.contains(primaryIdx)) {
+            for (int i = 1; i < totalWorkers; i++) {
+                int candidateIdx = (primaryIdx + i) % totalWorkers;
+                if (aliveIndices.contains(candidateIdx)) {
+                    return candidateIdx == myIndex; // true only for the first alive replica
+                }
+            }
+        }
+
+        // Case 3: Primary is alive — skip, it will handle it
+        return false;
+    }
+
     // Helping method for Registering New Game to SRNG
     // Used when manager adds a new game to worker
     // Used in handleAddNewGame()
@@ -923,6 +986,18 @@ public class WorkerServer {
             if(SRNGResponse == null || !SRNGResponse.equals("COMPLETE")){
                 throw new RuntimeException("SNRG Game registration failse: "+ SRNGResponse);
             }
+        }
+    }
+
+    private static void ensureGameRegisteredToSRNG(String gameName, String secret, int bufferSize) throws Exception{
+        try {
+            registerNewGameToSRNG(gameName, secret, bufferSize);
+        } catch (RuntimeException e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.toLowerCase().contains("already exists")) {
+                return;
+            }
+            throw e;
         }
     }
 

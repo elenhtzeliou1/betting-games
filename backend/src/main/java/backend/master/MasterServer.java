@@ -416,20 +416,24 @@ public class MasterServer {
         // Send MODIFY_GAME to ALL replicas
         // same command no SRNG involved
         List<Worker> replicas = getWorkersForGame(gameName);
-        String primaryWorkerResponse = null;
+        String firstSuccessResponse = null;
         String cmd = "MODIFY_GAME " + gameName + "|" + providerName + "|" + riskLevelStr + "|" + minBetStr + "|" + maxBetStr;
 
-        for(int i=0; i < replicas.size(); i++){
-            Worker w = replicas.get(i);
-            try{
+        for (Worker w : replicas) {
+            try {
                 String response = forwardMsgToWorkerOrThrowExc(w, cmd);
-                if(i==0) primaryWorkerResponse = response;
-            }catch (Exception e){
-                System.out.println("[MasterServer] WARNING: MODIFY_GAME failed for worker "+ w + ": " + e.getMessage());
+                if (firstSuccessResponse == null && !response.trim().toUpperCase().startsWith("ERROR")) {
+                    firstSuccessResponse = response;
+                }
+            } catch (Exception e) {
+                System.out.println("[MasterServer] WARNING: MODIFY_GAME failed for worker " + w + ": " + e.getMessage());
             }
         }
 
-        String responseToShow = primaryWorkerResponse != null ? primaryWorkerResponse : "ERROR all worker are unreachable\n";
+        String responseToShow = firstSuccessResponse != null
+                ? firstSuccessResponse
+                : "ERROR all replicas unreachable or failed\n";
+
         for(String ln: responseToShow.split("\n")){
             if(!ln.isBlank()) output.println(ln);
         }
@@ -447,29 +451,30 @@ public class MasterServer {
         }
 
         List<Worker> replicas = getWorkersForGame(gameName);
-        Worker primary = replicas.get(0);
+        String firstSuccessResponse = null;
 
-        // Primary: full delete (deregisters SRNG + set inactive)
-        String primaryWorkerResponse;
-        try{
-            primaryWorkerResponse = forwardMsgToWorkerOrThrowExc(primary, "DELETE_EXISTING_GAME "+ gameName);
-        }catch (Exception e){
-            output.println("ERROR Primary worker "+ primary+" unreachable: "+ e.getMessage());
-            output.println("END");
-            return;
-        }
-        // Replicas: set Inactive, only no SRNG interaction
-        for (int i = 1; i< replicas.size(); i++) {
-            Worker replica = replicas.get(i);
+        for (int i = 0; i < replicas.size(); i++) {
+            Worker w = replicas.get(i);
+            String cmd = (i == 0)
+                    ? "DELETE_EXISTING_GAME " + gameName
+                    : "DELETE_EXISTING_GAME_REPLICA " + gameName;
+
             try {
-                forwardMsgToWorkerOrThrowExc(replica, "DELETE_EXISTING_GAME_REPLICA " + gameName);
+                String response = forwardMsgToWorkerOrThrowExc(w, cmd);
+                if (firstSuccessResponse == null && !response.trim().toUpperCase().startsWith("ERROR")) {
+                    firstSuccessResponse = response;
+                }
             } catch (Exception e) {
-                System.out.println("[MasterServer] Warning: DELETE replica " + replica + " unreachable: " + e.getMessage());
+                System.out.println("[MasterServer] DELETE failed for worker " + w + ": " + e.getMessage());
             }
         }
 
-        for(String ln : primaryWorkerResponse.split("\n")){
-            if(!ln.isBlank()) output.println(ln);
+        if (firstSuccessResponse == null) {
+            output.println("ERROR all replicas unreachable or failed");
+        } else {
+            for (String ln : firstSuccessResponse.split("\n")) {
+                if (!ln.isBlank()) output.println(ln);
+            }
         }
         output.println("END");
     }
@@ -483,30 +488,42 @@ public class MasterServer {
             return;
         }
         List<Worker> replicas = getWorkersForGame(gameName);
-        Worker primary = replicas.get(0);
+        String firstSuccessResponse = null;
+        boolean activeWorkerRegisteredWithSrng = false;
 
-        // Primary : Make FULL visible (re -register SRNG + set active)
-        String primaryWorkerResponse;
-        try{
-            primaryWorkerResponse = forwardMsgToWorkerOrThrowExc(primary, "MAKE_VISIBLE "+ gameName);
-        }catch (Exception e){
-            output.println("ERROR Primary worker "+ primary + " unreachable: " + e.getMessage());
-            output.println("END");
-            return;
-        }
-
-        // Replicas: set active only (NO SRNG interraction)
-        for (int i= 1; i < replicas.size(); i++){
+        for (int i = 0; i < replicas.size(); i++) {
             Worker replica = replicas.get(i);
+            String command;
+
+            if (i == 0) {
+                command = "MAKE_VISIBLE " + gameName;
+            } else if (!activeWorkerRegisteredWithSrng) {
+                command = "MAKE_VISIBLE_PROMOTED " + gameName;
+            } else {
+                command = "MAKE_VISIBLE_REPLICA " + gameName;
+            }
+
             try{
-                forwardMsgToWorkerOrThrowExc(replica, "MAKE_VISIBLE_REPLICA " + gameName);
+                String response = forwardMsgToWorkerOrThrowExc(replica, command);
+                if (!response.trim().toUpperCase().startsWith("ERROR")) {
+                    if (firstSuccessResponse == null) {
+                        firstSuccessResponse = response;
+                    }
+                    if (!command.startsWith("MAKE_VISIBLE_REPLICA ")) {
+                        activeWorkerRegisteredWithSrng = true;
+                    }
+                }
             }catch (Exception e){
                 System.out.println("[MasterServer] WARNING: MAKE_VISIBLE replica " + replica + " unreachable: " + e.getMessage());
             }
         }
 
-        for(String ln : primaryWorkerResponse.split("\n")){
-            if(!ln.isBlank()) output.println(ln);
+        if (firstSuccessResponse == null) {
+            output.println("ERROR all replicas unreachable or failed");
+        } else {
+            for(String ln : firstSuccessResponse.split("\n")){
+                if(!ln.isBlank()) output.println(ln);
+            }
         }
         output.println("END");
     }
@@ -685,12 +702,21 @@ public class MasterServer {
         int expectedWorkers = aliveWorkers.size();
         int totalWorkers = workers.size();
 
+        // Build comma-separated alive indices so workers know who is up
+        // e.g. "0,2" means W0 and W2 are alive
+        StringBuilder aliveIdxSb = new StringBuilder();
+        for (int i = 0; i < aliveWorkers.size(); i++) {
+            if (i > 0) aliveIdxSb.append(",");
+            aliveIdxSb.append(workers.indexOf(aliveWorkers.get(i)));
+        }
+        String aliveIndicesStr = aliveIdxSb.toString();
+
         // MAP: each alive worker get its global index so it can filter primary only games
         for (Worker w : aliveWorkers) {
             int workerIndex = workers.indexOf(w);
             forwardMsgToWorker(w, "MAP_PROVIDER_PROFIT " + jobId + "|" + providerName + "|"
                     + reducerHost + "|" + reducerPort + "|" + expectedWorkers
-                    + "|" + workerIndex + "|" + totalWorkers);
+                    + "|" + workerIndex + "|" + totalWorkers + "|" + aliveIndicesStr);
         }
 
         String key = "PROVIDER_PROFIT|"+jobId;
@@ -739,11 +765,18 @@ public class MasterServer {
         int expectedWorkers = aliveWorkers.size();
         int totalWorkers = workers.size();
 
+        StringBuilder aliveIdxSb = new StringBuilder();
+        for (int i = 0; i < aliveWorkers.size(); i++) {
+            if (i > 0) aliveIdxSb.append(",");
+            aliveIdxSb.append(workers.indexOf(aliveWorkers.get(i)));
+        }
+        String aliveIndicesStr = aliveIdxSb.toString();
+
         for (Worker w : aliveWorkers) {
             int workerIndex = workers.indexOf(w);
             forwardMsgToWorker(w, "MAP_PLAYER_PROFIT " + jobId + "|" + userId + "|"
                     + reducerHost + "|" + reducerPort + "|" + expectedWorkers
-                    + "|" + workerIndex + "|" + totalWorkers);
+                    + "|" + workerIndex + "|" + totalWorkers + "|" + aliveIndicesStr);
         }
 
         String key = "PLAYER_PROFIT|" + jobId;
@@ -1081,19 +1114,23 @@ public class MasterServer {
 
         // Send RATE to ALL replicas (same command, no SRNG involved)
         List<Worker> replicas = getWorkersForGame(gameName);
-        String primaryResponse = null;
+        String firstSuccessResponse = null;
 
-        for (int i = 0; i < replicas.size(); i++) {
-            Worker w = replicas.get(i);
+        for (Worker w : replicas) {
             try {
                 String resp = forwardMsgToWorkerOrThrowExc(w, "RATE " + playerId + "|" + gameName + "|" + stars);
-                if (i == 0) primaryResponse = resp;
+                if (firstSuccessResponse == null && !resp.trim().toUpperCase().startsWith("ERROR")) {
+                    firstSuccessResponse = resp;
+                }
             } catch (Exception e) {
                 System.out.println("[MasterServer] WARNING: RATE failed for worker " + w + ": " + e.getMessage());
             }
         }
 
-        String responseToShow = primaryResponse != null ? primaryResponse : "ERROR All workers unreachable\n";
+        String responseToShow = firstSuccessResponse != null
+                ? firstSuccessResponse
+                : "ERROR all replicas unreachable or failed\n";
+
         for(String ln: responseToShow.split("\n")){
             if (!ln.isBlank()) output.println(ln);
         }
@@ -1192,6 +1229,37 @@ public class MasterServer {
         }catch (Exception e){
             return false;
         }
+    }
+
+
+    private static String forwardToReplicasAndReturnFirstSuccess(
+            String gameName,
+            String primaryCommand,
+            String replicaCommand
+    ) {
+        List<Worker> replicas = getWorkersForGame(gameName);
+        String firstSuccess = null;
+
+        for (int i = 0; i < replicas.size(); i++) {
+            Worker worker = replicas.get(i);
+            String command = (i == 0) ? primaryCommand : replicaCommand;
+
+            try {
+                String response = forwardMsgToWorkerOrThrowExc(worker, command);
+
+                if (firstSuccess == null && !response.trim().toUpperCase().startsWith("ERROR")) {
+                    firstSuccess = response;
+                }
+            } catch (Exception e) {
+                System.out.println("[MasterServer] Replica command failed on " + worker + ": " + e.getMessage());
+            }
+        }
+
+        if (firstSuccess == null) {
+            return "ERROR all replicas unreachable or failed\n";
+        }
+
+        return firstSuccess;
     }
     
     // ------------------------------------------------------------------------------  //
