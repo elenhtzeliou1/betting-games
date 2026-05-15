@@ -803,12 +803,7 @@ public class WorkerServer {
                     String gameRisk = game.getRiskLevel().name().toLowerCase();
                     if (!"ANY".equalsIgnoreCase(risk) && !gameRisk.equalsIgnoreCase(risk)) continue;
 
-                    String logoB64 = "";
-                    try{
-                        byte[] logoBytes = java.nio.file.Files.readAllBytes(
-                                java.nio.file.Paths.get(game.getGameLogo()));
-                        logoB64 = java.util.Base64.getEncoder().encodeToString(logoBytes);
-                    } catch (Exception ignored) {}
+
                     // If it passed all filters, emit one intermediate record
                     // We choose key2 implicitly as gameName (Reducer can deduplicate by gameName).
                     // Value2 is the rest of the game info needed by the UI.
@@ -826,7 +821,7 @@ public class WorkerServer {
                                     + game.getMinBet() + "|"
                                     + game.getMaxBet() + "|"
                                     + jackpot + "|"
-                                    + logoB64
+                                    + game.getGameLogo()
                     );
                 }
             }

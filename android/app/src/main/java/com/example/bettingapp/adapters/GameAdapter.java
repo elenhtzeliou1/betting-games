@@ -46,27 +46,13 @@ public class GameAdapter extends RecyclerView.Adapter<GameViewHolder> {
 
         holder.gameName.setText(game.getGameName());
 
-        // Fallback color
         int color;
         switch (game.getRisk().toLowerCase()) {
-            case "high": color = Color.parseColor("#FF4444"); break;
+            case "high":   color = Color.parseColor("#FF4444"); break;
             case "medium": color = Color.parseColor("#FFA500"); break;
-            default: color = Color.parseColor("#44BB44"); break;
+            default:       color = Color.parseColor("#44BB44"); break;
         }
-        String b64 = game.getGameLogo();
-        if (b64 != null && !b64.isEmpty()){
-            try{
-                byte[] bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT);
-                android.graphics.Bitmap bmp = android.graphics.BitmapFactory
-                        .decodeByteArray(bytes, 0, bytes.length);
-                holder.gameLogo.setImageBitmap(bmp);
-                holder.gameLogo.clearColorFilter();   // remove tint when real logo loaded
-            } catch (Exception e) {
-                holder.gameLogo.setColorFilter(color); // fallback to tint
-            } else {
-                holder.gameLogo.setColorFilter(color);     // no logo -> tint as before
-            }
-        }
+        holder.gameLogo.setColorFilter(color);
 
         holder.itemView.setOnClickListener(v -> {
             if (clickListener != null) clickListener.onGameClick(game);
