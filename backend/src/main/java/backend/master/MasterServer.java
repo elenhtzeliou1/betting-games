@@ -1088,6 +1088,13 @@ public class MasterServer {
             }
 
             try {
+                // workerResponseParts[3] is "random=N"
+                String randomPart = workerResponseParts[3].trim();
+                int randomNumber =0;
+                if (randomPart.startsWith("random=")){
+                    randomNumber = Integer.parseInt(randomPart.substring("random=".length()).trim());
+                }
+
                 // workerResponseParts[4] is like "payout=123.45"
                 String payoutPart = workerResponseParts[4].trim();
                 if (!payoutPart.startsWith("payout=")) {
@@ -1103,11 +1110,12 @@ public class MasterServer {
 
                 // SYNC_PLAY: update all other replicas without calling SRNG
                 final String payoutStr = payout.toPlainString();
+                final int finalRandom = randomNumber;
                 final Worker handledBy = usedWorker;
                 for (Worker w : replicas) {
                     if (w == handledBy) continue; // skip the one that handled the PLAY
                     try {
-                        forwardMsgToWorkerOrThrowExc(w, "SYNC_PLAY " + gameName + "|" + playerId + "|" + bet + "|" + payoutStr);
+                        forwardMsgToWorkerOrThrowExc(w, "SYNC_PLAY " + gameName + "|" + playerId + "|" + bet + "|" + payoutStr + "|" + finalRandom);
                     } catch (Exception ex) {
                         System.out.println("[MasterServer] SYNC_PLAY failed for replica " + w + ": " + ex.getMessage());
                     }

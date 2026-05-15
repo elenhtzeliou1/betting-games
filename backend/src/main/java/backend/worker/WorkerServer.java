@@ -535,12 +535,12 @@ public class WorkerServer {
 
     // SYNC_PLAY: called by Master to update replica state after primary executed a PLAY.
     // Updates profit/loss and bet history WITHOUT calling SRNG.
-    // Protocol: SYNC_PLAY gameName|playerId|bet|payout
+    // Protocol: SYNC_PLAY gameName|playerId|bet|payout|randomNumber
     private static void handleSyncPlay(String inputString, PrintWriter output) {
         String payload = inputString.substring("SYNC_PLAY ".length()).trim();
         String[] parts = payload.split("\\|");
 
-        if (parts.length != 4) {
+        if (parts.length != 5) {
             output.println("ERROR bad SYNC_PLAY format. Expected: gameName|playerId|bet|payout");
             output.println("END");
             return;
@@ -549,9 +549,10 @@ public class WorkerServer {
         String gameName = parts[0].trim().toLowerCase();
         String playerId = parts[1].trim();
         BigDecimal bet, payout;
+        int randomNumber = Integer.parseInt(parts[4].trim());
 
         try {
-            bet    = new BigDecimal(parts[2].trim());
+            bet = new BigDecimal(parts[2].trim());
             payout = new BigDecimal(parts[3].trim());
         } catch (NumberFormatException e) {
             output.println("ERROR SYNC_PLAY invalid numbers: " + e.getMessage());
@@ -574,7 +575,7 @@ public class WorkerServer {
         BigDecimal houseDelta = bet.subtract(payout);
         synchronized (gameState) {
             gameState.addProfitLoss(houseDelta);
-            BetRecord betRecord = new BetRecord(playerId, gameName, bet, payout, 0);
+            BetRecord betRecord = new BetRecord(playerId, gameName, bet, payout, randomNumber);
             gameState.addBetRecord(betRecord);
         }
 
