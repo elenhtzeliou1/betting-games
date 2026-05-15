@@ -3,7 +3,7 @@
   "ProviderName": "CasinoGames",
   "Stars": 4,
   "NoOfVotes": 2,
-  "GameLogo": "/usr/bin/images/gameLogo.png",
+  "GameLogo": "src/main/resources/images/c82ffe8e4c.png",
   "MinBet": 7,
   "MaxBet":45,
   "RiskLevel": "low",

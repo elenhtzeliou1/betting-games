@@ -751,8 +751,8 @@ public class WorkerServer {
         String reducerHost = parts[4].trim();
         int reducerPort = Integer.parseInt(parts[5].trim());
         int expectedN = Integer.parseInt(parts[6].trim());
-        int workerIndex     = Integer.parseInt(parts[7].trim());
-        int totalWorkers    = Integer.parseInt(parts[8].trim());
+        int workerIndex = Integer.parseInt(parts[7].trim());
+        int totalWorkers = Integer.parseInt(parts[8].trim());
 
         // Parse alive worker indices e.g. "0,2" -> {0, 2}
         Set<Integer> aliveIndices = new HashSet<>();
@@ -803,6 +803,12 @@ public class WorkerServer {
                     String gameRisk = game.getRiskLevel().name().toLowerCase();
                     if (!"ANY".equalsIgnoreCase(risk) && !gameRisk.equalsIgnoreCase(risk)) continue;
 
+                    String logoB64 = "";
+                    try{
+                        byte[] logoBytes = java.nio.file.Files.readAllBytes(
+                                java.nio.file.Paths.get(game.getGameLogo()));
+                        logoB64 = java.util.Base64.getEncoder().encodeToString(logoBytes);
+                    } catch (Exception ignored) {}
                     // If it passed all filters, emit one intermediate record
                     // We choose key2 implicitly as gameName (Reducer can deduplicate by gameName).
                     // Value2 is the rest of the game info needed by the UI.
@@ -820,7 +826,7 @@ public class WorkerServer {
                                     + game.getMinBet() + "|"
                                     + game.getMaxBet() + "|"
                                     + jackpot + "|"
-                                    + game.getGameLogo()
+                                    + logoB64
                     );
                 }
             }
