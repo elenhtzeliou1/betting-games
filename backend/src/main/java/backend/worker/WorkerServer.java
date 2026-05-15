@@ -541,7 +541,7 @@ public class WorkerServer {
         String[] parts = payload.split("\\|");
 
         if (parts.length != 5) {
-            output.println("ERROR bad SYNC_PLAY format. Expected: gameName|playerId|bet|payout");
+            output.println("ERROR bad SYNC_PLAY format. Expected: gameName|playerId|bet|payout|randomNumber");
             output.println("END");
             return;
         }
@@ -549,11 +549,12 @@ public class WorkerServer {
         String gameName = parts[0].trim().toLowerCase();
         String playerId = parts[1].trim();
         BigDecimal bet, payout;
-        int randomNumber = Integer.parseInt(parts[4].trim());
+        int randomNumber;
 
         try {
             bet = new BigDecimal(parts[2].trim());
             payout = new BigDecimal(parts[3].trim());
+            randomNumber = Integer.parseInt(parts[4].trim());
         } catch (NumberFormatException e) {
             output.println("ERROR SYNC_PLAY invalid numbers: " + e.getMessage());
             output.println("END");
