@@ -256,7 +256,7 @@ public class RateActivity extends AppCompatActivity {
 
     }
 
-    /** Unique key: one entry per player + game combination. */
+    // Unique key: one entry per player + game combination.
     private String getRatingKey() {
         return "rated_" + playerId + "_" + gameName.trim().toLowerCase();
     }
@@ -269,7 +269,7 @@ public class RateActivity extends AppCompatActivity {
                 .apply();
     }
 
-    /** Returns 0 if the player has not rated this game yet. */
+    // Returns 0 if the player has not rated this game yet.
     private int getSavedRating() {
         return getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
                 .getInt(getRatingKey(), 0);
@@ -280,7 +280,7 @@ public class RateActivity extends AppCompatActivity {
         return value == null || value.trim().isEmpty();
     }
 
-    /** "high risk" → "High risk" */
+    // "high risk" -> "High risk"
     private String capitalize(String value) {
         if (isEmpty(value)) return value;
         String v = value.trim();

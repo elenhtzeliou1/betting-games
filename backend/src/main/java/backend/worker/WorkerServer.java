@@ -80,7 +80,7 @@ public class WorkerServer {
                 handleAddNewGameReplica(inputString, output);
                 return;
             }else if(inputString.startsWith("SHOW_ALL_GAMES")){
-                handleShowAllGames(output);
+                handleShowAllGames(inputString,output);
                 return;
             }else if(inputString.startsWith("MODIFY_GAME ")){
                 handleModifyGame(inputString,output);
@@ -212,10 +212,46 @@ public class WorkerServer {
         output.println("END");
     }
 
-    private static void handleShowAllGames(PrintWriter output) {
+    private static void handleShowAllGames(String inputString, PrintWriter output) {
+        // Format (sent by master): "SHOW_ALL_GAMES workerIndex|totalWorkers|aliveIndices"
+        // Parse routing metadata so this worker reports only its primary-owned games.
+        int myIndex = -1;
+        int totalWorkers = -1;
+        Set<Integer> aliveIndices = null;
+
+        String paramStr = inputString.substring("SHOW_ALL_GAMES".length()).trim();
+
+        if (!paramStr.isEmpty()) {
+            String[] params = paramStr.split("\\|");
+            if (params.length == 3) {
+                try {
+                    myIndex      = Integer.parseInt(params[0].trim());
+                    totalWorkers = Integer.parseInt(params[1].trim());
+                    aliveIndices = new HashSet<>();
+                    for (String idx : params[2].trim().split(",")) {
+                        try { aliveIndices.add(Integer.parseInt(idx.trim())); } catch (Exception ignore) {}
+                    }
+                } catch (Exception e) {
+                    myIndex = -1; // fall through to no-filter mode
+                }
+            }
+        }
+
+        final int finalMyIndex = myIndex;
+        final int finalTotalWorkers = totalWorkers;
+        final Set<Integer> finalAliveIndices = aliveIndices;
+
         synchronized (gamesByName) {
             for (Map.Entry<String, GameState> val : gamesByName.entrySet()){
+                String gameKey = val.getKey();
                 GameState gameState = val.getValue();
+
+                // If routing metadata was supplied, apply the active-replication rule:
+                // only emit games this worker is the primary (or first alive fallback) for.
+                if (finalMyIndex >= 0 && finalTotalWorkers > 0 && finalAliveIndices != null) {
+                    if (!shouldReportGame(gameKey, finalMyIndex, finalTotalWorkers, finalAliveIndices)) continue;
+                }
+
                 BigDecimal jackpot = getJackpotForSpecificRiskLevel(gameState.getGame().getRiskLevel());
                 Game game = gameState.getGame();
                 output.println("GameName: " + game.getGameName()
@@ -698,7 +734,10 @@ public class WorkerServer {
     private static void handleMapSearch(String inputString, int port, PrintWriter output){
         String payload = inputString.substring("MAP_SEARCH ".length()).trim();
         String[] parts = payload.split("\\|");
-        if(parts.length!=7){
+
+        // New format (10 fields):
+        // jobId|minStars|betCategory|risk|reducerHost|reducerPort|expectedN|workerIndex|totalWorkers|aliveIndices
+        if(parts.length != 10){
             output.println("ERROR bad format. Expected jobId|minStars|betCategory|risk|reducerHost|reducerPost|expectedN");
             output.println("END");
             return;
@@ -710,6 +749,14 @@ public class WorkerServer {
         String reducerHost = parts[4].trim();
         int reducerPort = Integer.parseInt(parts[5].trim());
         int expectedN = Integer.parseInt(parts[6].trim());
+        int workerIndex     = Integer.parseInt(parts[7].trim());
+        int totalWorkers    = Integer.parseInt(parts[8].trim());
+
+        // Parse alive worker indices e.g. "0,2" -> {0, 2}
+        Set<Integer> aliveIndices = new HashSet<>();
+        for (String idx : parts[9].trim().split(",")) {
+            try { aliveIndices.add(Integer.parseInt(idx.trim())); } catch (Exception ignore) {}
+        }
 
         // CONNECT TO REDUCER
         // send map output
@@ -730,9 +777,20 @@ public class WorkerServer {
                     // Only games that are visible to player
                     // Skip non visible games (to player)
                     if(!gameState.isActive()) continue;
+
+                    String gameKey = gameState.getGame().getGameName().trim().toLowerCase();
+
+                    // Active-replication rule:
+                    // Emit this game ONLY if this worker is the primary for it,
+                    // or the first available replica when the primary is down.
+                    // This is the same routing logic used by MAP_PROVIDER_PROFIT /
+                    // MAP_PLAYER_PROFIT — no deduplication in the reducer needed.
+                    if (!shouldReportGame(gameKey, workerIndex, totalWorkers, aliveIndices)) continue;
+
                     var game = gameState.getGame();
 
-                    // --- Filters:
+
+                    // Apply search filters
                     // 1) Filter: minStars (if minStars ===0 : skip this)
                     if(minStars>0 && game.getStars()<minStars) continue;
 
@@ -766,8 +824,6 @@ public class WorkerServer {
             }
             // Signal the end-of-list fot this Worker's partial results
             writer.println("END");
-
-
 
             // use in to read reducer ack so we know the reducer accepted our submission
             String ack = reader.readLine(); // should be "ACK"
@@ -939,7 +995,7 @@ public class WorkerServer {
 
             // 5. Send Result to MasterServer
             output.println("PLAY_RESULT| player= "+ playerId
-                    +"|game="+gameName
+                    +"|game=" + gameName
                     + "|random=" + srngReply.getNumber()
                     + "|payout=" + payout
                     + "|houseDelta=" + houseDelta

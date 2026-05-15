@@ -40,9 +40,8 @@ public class Producer implements Runnable {
             }catch (Exception e){
                 System.out.println("Producer error: "+ e.getMessage());
             }
-
-            System.out.println("[PRODUCER | DEBUG] " + Thread.currentThread().getName() + " stopped");
         }
+        System.out.println("[PRODUCER | DEBUG] " + Thread.currentThread().getName() + " stopped");
     }
 
 

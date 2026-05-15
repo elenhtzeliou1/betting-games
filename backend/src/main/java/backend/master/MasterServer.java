@@ -177,6 +177,7 @@ public class MasterServer {
     // 3) Convert the hash to a valid worker index in [0 .. workers.size()-1] using floorMod
     //    (floorMod is used instead of % to avoid negative indexes when hashCode() is negative).
     // Result: the same gameName is always routed to the same worker as long as the worker list/order doesn't change.
+    // UNUSED FOR ACTIVE REPLICATION
     private static Worker chooseWorker(String gameName){
         String key =gameName.trim().toLowerCase(); //text normalization
         int idx = Math.floorMod(key.hashCode(), workers.size()); // stable index 0..N-1 (handles negative hashes)
@@ -315,7 +316,7 @@ public class MasterServer {
                 providers.add(new GameProvider(providerName));
             }
         }
-        // 2. Send REPLICA command to all other replicas (they store dat only the DO NOT REGISTER to SRNG)
+        // 2. Send REPLICA command to all other replicas (they store data only, the DO NOT REGISTER to SRNG)
         for(int i = 1; i< replicas.size(); i++){
             Worker replica = replicas.get(i);
 
@@ -645,29 +646,43 @@ public class MasterServer {
 
     private static String gatherAllGamesFromWorkers(String inputString){
         StringBuilder gameNames = new StringBuilder();
-        Set<String> seenGames = new HashSet<>();
 
-        for (Worker worker : workers){
-            if (!isWorkerAlive(worker)) {
+        // Determine alive workers and build routing metadata
+        List<Worker> aliveWorkers = new ArrayList<>();
+        for (Worker worker : workers) {
+            if (isWorkerAlive(worker)) {
+                aliveWorkers.add(worker);
+            } else {
                 System.out.println("[MasterServer] Worker " + worker + " is down, skipping SHOW_ALL_GAMES");
-                continue;
-            }
-            String workerResponse = forwardMsgToWorker(worker, inputString);
-            if (workerResponse == null || workerResponse.isBlank()) continue;
-
-            for(String ln : workerResponse.split("\n")){
-                ln = ln.trim();
-                if (ln.isBlank()) continue;
-
-                // Deduplicate by gameName (handles replication duplicates)
-                // Line format: "GameName: X | Provider: ..."
-                String gameKey = extractGameNameFromLine(ln);
-                if (gameKey != null && seenGames.contains(gameKey)) continue;
-                if (gameKey != null) seenGames.add(gameKey);
-
-                gameNames.append(ln).append("\n");
             }
         }
+
+        if (aliveWorkers.isEmpty()) return "NO GAMES YET!\n";
+
+        int totalWorkers = workers.size();
+
+        StringBuilder aliveIdxSb = new StringBuilder();
+        for (int i = 0; i < aliveWorkers.size(); i++) {
+            if (i > 0) aliveIdxSb.append(",");
+            aliveIdxSb.append(workers.indexOf(aliveWorkers.get(i)));
+        }
+        String aliveIndicesStr = aliveIdxSb.toString();
+
+        // Each worker receives its index so it applies shouldReportGame() and
+        // only returns games it is the primary (or alive fallback) for.
+        // No client-side deduplication needed.
+        for (Worker worker : aliveWorkers) {
+            int workerIndex = workers.indexOf(worker);
+            String cmd = "SHOW_ALL_GAMES " + workerIndex + "|" + totalWorkers + "|" + aliveIndicesStr;
+            String workerResponse = forwardMsgToWorker(worker, cmd);
+            if (workerResponse == null || workerResponse.isBlank()) continue;
+
+            for (String ln : workerResponse.split("\n")) {
+                ln = ln.trim();
+                if (!ln.isBlank()) gameNames.append(ln).append("\n");
+            }
+        }
+
         return gameNames.length() == 0 ? "NO GAMES YET!\n" : gameNames.toString();
     }
 
@@ -712,11 +727,14 @@ public class MasterServer {
         String aliveIndicesStr = aliveIdxSb.toString();
 
         // MAP: each alive worker get its global index so it can filter primary only games
+        // parallel - all workers start their map phase simultaneously
         for (Worker w : aliveWorkers) {
-            int workerIndex = workers.indexOf(w);
-            forwardMsgToWorker(w, "MAP_PROVIDER_PROFIT " + jobId + "|" + providerName + "|"
+            final int workerIndex = workers.indexOf(w);
+            final String mapCmd = "MAP_PROVIDER_PROFIT " + jobId + "|" + providerName + "|"
                     + reducerHost + "|" + reducerPort + "|" + expectedWorkers
-                    + "|" + workerIndex + "|" + totalWorkers + "|" + aliveIndicesStr);
+                    + "|" + workerIndex + "|" + totalWorkers + "|" + aliveIndicesStr;
+
+            new Thread(() -> forwardMsgToWorker(w, mapCmd)).start();
         }
 
         String key = "PROVIDER_PROFIT|"+jobId;
@@ -773,10 +791,12 @@ public class MasterServer {
         String aliveIndicesStr = aliveIdxSb.toString();
 
         for (Worker w : aliveWorkers) {
-            int workerIndex = workers.indexOf(w);
-            forwardMsgToWorker(w, "MAP_PLAYER_PROFIT " + jobId + "|" + userId + "|"
+            final int workerIndex = workers.indexOf(w);
+            final String mapCmd = "MAP_PLAYER_PROFIT " + jobId + "|" + userId + "|"
                     + reducerHost + "|" + reducerPort + "|" + expectedWorkers
-                    + "|" + workerIndex + "|" + totalWorkers + "|" + aliveIndicesStr);
+                    + "|" + workerIndex + "|" + totalWorkers + "|" + aliveIndicesStr;
+
+            new Thread(() -> forwardMsgToWorker(w, mapCmd)).start();
         }
 
         String key = "PLAYER_PROFIT|" + jobId;
@@ -817,6 +837,7 @@ public class MasterServer {
         // Use unique id so we can match Reducer result to this request
         // (many players / managers are requesting different things simultaneously)
         String jobId = UUID.randomUUID().toString();
+
         // Only send to alive workers, adjust expectedN
         List<Worker> aliveWorkers = new ArrayList<>();
         for (Worker w : workers) {
@@ -831,10 +852,25 @@ public class MasterServer {
             return "ERROR No workers available\n";
         }
 
+        int totalWorkers = workers.size();
         int expectedNWorkers = aliveWorkers.size();
 
+        // Build alive-index string so each worker knows which peers are up
+        // e.g. workers=[W0, W1, W2], alive=[W0, W2] -> "0,2"
+        StringBuilder aliveIdxSb = new StringBuilder();
+        for (int i = 0; i < aliveWorkers.size(); i++) {
+            if (i > 0) aliveIdxSb.append(",");
+            aliveIdxSb.append(workers.indexOf(aliveWorkers.get(i)));
+        }
+        String aliveIndicesStr = aliveIdxSb.toString();
+
         for (Worker worker : aliveWorkers) {
-            forwardMsgToWorker(worker, "MAP_SEARCH " + jobId + "|0|ANY|ANY|" + reducerHost + "|" + reducerPort + "|" + expectedNWorkers);
+            final int workerIndex = workers.indexOf(worker);
+            // New format: jobId|minStars|betCat|risk|reducerHost|reducerPort|expectedN|workerIndex|totalWorkers|aliveIndices
+            final String mapCmd = "MAP_SEARCH " + jobId + "|0|ANY|ANY|"
+                    + reducerHost + "|" + reducerPort + "|" + expectedNWorkers
+                    + "|" + workerIndex + "|" + totalWorkers + "|" + aliveIndicesStr;
+            new Thread(() -> forwardMsgToWorker(worker, mapCmd)).start();
         }
 
         String key = "SEARCH|" + jobId;
@@ -902,14 +938,25 @@ public class MasterServer {
             return;
         }
 
+        int totalWorkers = workers.size();
         int expectedWorkers = aliveWorkers.size();
 
-        // MAP: broadcast to alive workers only
+        // Build alive-index string (same pattern as MAP_PROVIDER_PROFIT / MAP_PLAYER_PROFIT)
+        StringBuilder aliveIdxSb = new StringBuilder();
+        for (int i = 0; i < aliveWorkers.size(); i++) {
+            if (i > 0) aliveIdxSb.append(",");
+            aliveIdxSb.append(workers.indexOf(aliveWorkers.get(i)));
+        }
+        String aliveIndicesStr = aliveIdxSb.toString();
+
+        // MAP: broadcast to alive workers only, each with its own index so it
+        // can decide which games it is the primary (or fallback) for.
         for (Worker worker : aliveWorkers) {
-            forwardMsgToWorker(worker,
-                    "MAP_SEARCH " + jobId + "|" + minStars + "|" + betCat + "|" + risk + "|" +
-                            reducerHost + "|" + reducerPort + "|" + expectedWorkers
-            );
+            final int workerIndex = workers.indexOf(worker);
+            final String mapCmd = "MAP_SEARCH " + jobId + "|" + minStars + "|" + betCat + "|" + risk + "|"
+                    + reducerHost + "|" + reducerPort + "|" + expectedWorkers
+                    + "|" + workerIndex + "|" + totalWorkers + "|" + aliveIndicesStr;
+            new Thread(() -> forwardMsgToWorker(worker, mapCmd)).start();
         }
 
         // WAIT for reducer push on callback port

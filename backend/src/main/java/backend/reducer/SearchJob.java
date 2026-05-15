@@ -5,7 +5,6 @@ import java.io.PrintWriter;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 
 /*
@@ -17,8 +16,9 @@ import java.util.List;
  */
 public class SearchJob extends Job{
 
-    // key2 = normalized gameName, value2 = full GAME|.. line
-    private final LinkedHashMap<String, String> uniqueByGame = new LinkedHashMap<>();
+    // Collected game lines — no deduplication needed because the Worker layer
+    // guarantees each game is reported by exactly one worker.
+    private final List<String> gameLines = new ArrayList<>();
 
     public SearchJob(String jobId, int expectedN, String masterHost, int masterCallbackPort){
        super(jobId,expectedN,masterHost,masterCallbackPort);
@@ -26,19 +26,16 @@ public class SearchJob extends Job{
 
     /*
      * Reduce merge:
-     * - Deduplicate by gameName
+     * - Accumulate GAME lines
      * - Count worker submissions
      * - When complete -> push to Master callback port
      */
     @Override
     public synchronized void addPartialResults(List<String> partialLines) {
         for (String ln : partialLines) {
-            if (!ln.startsWith("GAME|")) continue;
-            String[] p = ln.split("\\|");
-            if (p.length < 2) continue;
-
-            String gameKey = p[1].trim().toLowerCase();
-            uniqueByGame.putIfAbsent(gameKey, ln);
+            if (ln.startsWith("GAME|")) {
+                gameLines.add(ln);
+            }
         }
 
         increaseReceivedWorkers();
@@ -53,12 +50,12 @@ public class SearchJob extends Job{
 
     // Build sorted snapshot of final merged list
     private List<String> buildFinalListLocked() {
-        List<String> list = new ArrayList<>(uniqueByGame.values());
+        List<String> list = new ArrayList<>(gameLines);
 
         // Sorting: stars DESC, then name ASC
         list.sort((a, b) -> {
             double sa = parseStars(a);
-            double sb =parseStars(b);
+            double sb = parseStars(b);
             if (sa != sb) return Double.compare(sb, sa);
             return parseName(a).compareToIgnoreCase(parseName(b));
         });
