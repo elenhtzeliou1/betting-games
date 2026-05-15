@@ -2,6 +2,7 @@
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:paddingStart="10dp"
@@ -19,35 +20,36 @@
         android:layout_height="wrap_content"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <TextView
-        android:id="@+id/toolbarBalance"
-        android:layout_width="wrap_content"
-        android:layout_height="32dp"
-        android:gravity="center"
-        android:paddingStart="14dp"
-        android:paddingEnd="14dp"
-        android:text="— FUN"
-        android:textColor="#FFFFFF"
-        android:textSize="11sp"
-        android:textStyle="bold"
-        android:background="@drawable/background_balance_pill"
-        app:layout_constraintTop_toTopOf="@id/toolbar"
-        app:layout_constraintBottom_toBottomOf="@id/toolbar"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginEnd="14dp" />
-
     <!-- ═══════════════════════════════════════════════════════════════
          SCROLLABLE CONTENT
     ═══════════════════════════════════════════════════════════════════ -->
 
+    <TextView
+        android:id="@+id/toolbarBalance"
+        android:layout_width="79dp"
+        android:layout_height="27dp"
+        android:background="@drawable/background_balance_pill"
+        android:gravity="center"
+        android:paddingStart="5dp"
+        android:paddingEnd="5dp"
+        android:text="— FUN"
+        android:textColor="#FFFFFF"
+        android:textSize="11sp"
+        android:textStyle="bold"
+        app:layout_constraintBottom_toTopOf="@+id/nestedScrollView"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@id/toolbar"
+        app:layout_constraintVertical_bias="1.0" />
+
     <androidx.core.widget.NestedScrollView
+        android:id="@+id/nestedScrollView"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:fillViewport="true"
-        app:layout_constraintTop_toBottomOf="@id/toolbar"
         app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintTop_toBottomOf="@id/toolbar">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -72,8 +74,8 @@
                     android:id="@+id/heroDefault"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:orientation="vertical"
-                    android:gravity="center">
+                    android:gravity="center"
+                    android:orientation="vertical">
 
                     <TextView
                         android:layout_width="72dp"
@@ -92,8 +94,8 @@
                     android:id="@+id/heroLoading"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:orientation="vertical"
                     android:gravity="center"
+                    android:orientation="vertical"
                     android:visibility="gone">
 
                     <ProgressBar
@@ -116,8 +118,8 @@
                     android:id="@+id/heroResult"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:orientation="vertical"
                     android:gravity="center"
+                    android:orientation="vertical"
                     android:paddingStart="24dp"
                     android:paddingEnd="24dp"
                     android:visibility="gone">
@@ -126,32 +128,32 @@
                         android:id="@+id/tvResultTitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:gravity="center"
                         android:text="YOU WON!"
                         android:textColor="#FFFFFF"
                         android:textSize="20sp"
-                        android:textStyle="bold"
-                        android:gravity="center" />
+                        android:textStyle="bold" />
 
                     <TextView
                         android:id="@+id/tvResultPayout"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
+                        android:gravity="center"
                         android:text="+0.00 FUN"
                         android:textColor="#E91E83"
                         android:textSize="26sp"
-                        android:textStyle="bold"
-                        android:gravity="center" />
+                        android:textStyle="bold" />
 
                     <TextView
                         android:id="@+id/tvResultBalance"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
+                        android:gravity="center"
                         android:text="Balance: —"
                         android:textColor="#8E7A84"
-                        android:textSize="11sp"
-                        android:gravity="center" />
+                        android:textSize="11sp" />
 
                 </LinearLayout>
 
@@ -162,15 +164,15 @@
                     android:layout_height="28dp"
                     android:layout_gravity="top|end"
                     android:layout_margin="12dp"
+                    android:background="@drawable/background_risk_badge"
+                    android:backgroundTint="#FF4444"
                     android:gravity="center"
                     android:paddingStart="12dp"
                     android:paddingEnd="12dp"
                     android:text="High"
                     android:textColor="#FFFFFF"
                     android:textSize="11sp"
-                    android:textStyle="bold"
-                    android:backgroundTint="#FF4444"
-                    android:background="@drawable/background_risk_badge" />
+                    android:textStyle="bold" />
 
             </FrameLayout>
 
@@ -183,8 +185,8 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:paddingStart="18dp"
-                android:paddingEnd="18dp"
                 android:paddingTop="18dp"
+                android:paddingEnd="18dp"
                 android:paddingBottom="4dp">
 
                 <TextView
@@ -217,8 +219,8 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:paddingStart="18dp"
-                android:paddingEnd="18dp"
                 android:paddingTop="14dp"
+                android:paddingEnd="18dp"
                 android:paddingBottom="6dp">
 
                 <!-- Min bet — tap to set bet to minimum -->
@@ -227,12 +229,12 @@
                     android:layout_width="0dp"
                     android:layout_height="72dp"
                     android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:gravity="center_vertical"
                     android:background="@drawable/background_rating_card"
-                    android:foreground="?attr/selectableItemBackground"
                     android:clickable="true"
                     android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center_vertical"
+                    android:orientation="vertical"
                     android:paddingStart="12dp"
                     android:paddingEnd="8dp">
 
@@ -254,7 +256,9 @@
                         android:textStyle="bold" />
                 </LinearLayout>
 
-                <View android:layout_width="6dp" android:layout_height="match_parent" />
+                <View
+                    android:layout_width="6dp"
+                    android:layout_height="match_parent" />
 
                 <!-- Max bet — tap to set bet to maximum -->
                 <LinearLayout
@@ -262,12 +266,12 @@
                     android:layout_width="0dp"
                     android:layout_height="72dp"
                     android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:gravity="center_vertical"
                     android:background="@drawable/background_rating_card"
-                    android:foreground="?attr/selectableItemBackground"
                     android:clickable="true"
                     android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center_vertical"
+                    android:orientation="vertical"
                     android:paddingStart="12dp"
                     android:paddingEnd="8dp">
 
@@ -289,16 +293,18 @@
                         android:textStyle="bold" />
                 </LinearLayout>
 
-                <View android:layout_width="6dp" android:layout_height="match_parent" />
+                <View
+                    android:layout_width="6dp"
+                    android:layout_height="match_parent" />
 
                 <!-- Jackpot — display only, not  :( -->
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="72dp"
                     android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:gravity="center_vertical"
                     android:background="@drawable/background_rating_card"
+                    android:gravity="center_vertical"
+                    android:orientation="vertical"
                     android:paddingStart="12dp"
                     android:paddingEnd="8dp">
 
@@ -330,8 +336,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
                 android:layout_marginStart="18dp"
-                android:layout_marginEnd="18dp"
                 android:layout_marginTop="10dp"
+                android:layout_marginEnd="18dp"
                 android:background="#35202A" />
 
             <!-- ───────────────────────────────────────────────────────
@@ -343,8 +349,8 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:paddingStart="18dp"
-                android:paddingEnd="18dp"
-                android:paddingTop="18dp">
+                android:paddingTop="18dp"
+                android:paddingEnd="18dp">
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -357,29 +363,29 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
+                    android:layout_marginTop="12dp"
                     android:gravity="center_vertical"
-                    android:layout_marginTop="12dp">
+                    android:orientation="horizontal">
 
                     <Button
                         android:id="@+id/btnBetMinus"
                         android:layout_width="52dp"
                         android:layout_height="52dp"
-                        android:text="−"
-                        android:textSize="22sp"
-                        android:textColor="#FFFFFF"
-                        android:textStyle="bold"
                         android:background="@drawable/background_rating_card"
-                        app:backgroundTint="@null"
                         android:padding="0dp"
-                        android:textAllCaps="false" />
+                        android:text="−"
+                        android:textAllCaps="false"
+                        android:textColor="#FFFFFF"
+                        android:textSize="22sp"
+                        android:textStyle="bold"
+                        app:backgroundTint="@null" />
 
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:orientation="horizontal"
-                        android:gravity="center">
+                        android:gravity="center"
+                        android:orientation="horizontal">
 
                         <TextView
                             android:id="@+id/tvBetAmount"
@@ -393,9 +399,9 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
+                            android:layout_gravity="bottom"
                             android:layout_marginStart="5dp"
                             android:layout_marginBottom="4dp"
-                            android:layout_gravity="bottom"
                             android:text="FUN"
                             android:textColor="#8E7A84"
                             android:textSize="13sp" />
@@ -405,14 +411,14 @@
                         android:id="@+id/btnBetPlus"
                         android:layout_width="52dp"
                         android:layout_height="52dp"
-                        android:text="+"
-                        android:textSize="22sp"
-                        android:textColor="#FFFFFF"
-                        android:textStyle="bold"
                         android:background="@drawable/background_rating_card"
-                        app:backgroundTint="@null"
                         android:padding="0dp"
-                        android:textAllCaps="false" />
+                        android:text="+"
+                        android:textAllCaps="false"
+                        android:textColor="#FFFFFF"
+                        android:textSize="22sp"
+                        android:textStyle="bold"
+                        app:backgroundTint="@null" />
 
                 </LinearLayout>
 
@@ -442,12 +448,12 @@
                         android:id="@+id/btnPlaceBet"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
+                        android:background="@drawable/background_submit_enabled"
                         android:text="Place bet"
                         android:textAllCaps="false"
                         android:textColor="#FFFFFF"
                         android:textSize="15sp"
                         android:textStyle="bold"
-                        android:background="@drawable/background_submit_enabled"
                         app:backgroundTint="@null" />
 
                     <!-- Spinner shown while bet is in-flight or during the cooldown -->

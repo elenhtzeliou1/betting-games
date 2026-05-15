@@ -44,9 +44,10 @@ public class GameBottomSheetFragment extends BottomSheetDialogFragment {
     private static final String ARG_STARS = "stars";
     private static final String ARG_VOTES = "votes";
 
+    private static final String ARG_LOGO = "logo";
 
     public static GameBottomSheetFragment newInstance(
-            String gameName, String providerName, double minBet, double maxBet, double jackpot , String risk, String betCategory, double stars, int votes) {
+            String gameName, String providerName, double minBet, double maxBet, double jackpot , String risk, String betCategory, double stars, int votes, String logo) {
 
         Bundle args = new Bundle();
         args.putString(ARG_GAME_NAME, gameName);
@@ -58,7 +59,7 @@ public class GameBottomSheetFragment extends BottomSheetDialogFragment {
         args.putString(ARG_BET_CATEGORY, betCategory);
         args.putDouble(ARG_STARS, stars);
         args.putInt(ARG_VOTES, votes);
-
+        args.putString(ARG_LOGO, logo != null ? logo : "");
 
         GameBottomSheetFragment fragment = new GameBottomSheetFragment();
         fragment.setArguments(args);
@@ -91,8 +92,9 @@ public class GameBottomSheetFragment extends BottomSheetDialogFragment {
         String betCategory = args.getString(ARG_BET_CATEGORY, "");
         double stars = args.getDouble(ARG_STARS, 0.0);
         int votes = args.getInt(ARG_VOTES, 0);
+        String logo = args.getString(ARG_LOGO, "");
 
-        applyBackground(view, risk);
+        applyBackground(view, risk, logo);
 
         TextView tvGameName    = view.findViewById(R.id.tvGameName);
         TextView tvProvider    = view.findViewById(R.id.tvProvider);
@@ -162,10 +164,36 @@ public class GameBottomSheetFragment extends BottomSheetDialogFragment {
         BottomSheetBehavior.from(bottomSheet).setState(BottomSheetBehavior.STATE_EXPANDED);
     }
 
-    private void applyBackground(View view, String risk) {
+    private void applyBackground(View view, String risk, String logoB64) {
         float density = getResources().getDisplayMetrics().density;
         float cornerRadius = 16 * density;
 
+        if (logoB64 != null && !logoB64.isEmpty()) {
+            try {
+                byte[] bytes = android.util.Base64.decode(logoB64, android.util.Base64.DEFAULT);
+                android.graphics.Bitmap bmp = android.graphics.BitmapFactory
+                        .decodeByteArray(bytes, 0, bytes.length);
+                if (bmp != null) {
+                    android.graphics.drawable.BitmapDrawable bitmapDrawable =
+                            new android.graphics.drawable.BitmapDrawable(getResources(), bmp);
+                    bitmapDrawable.setGravity(android.view.Gravity.CENTER);
+
+                    android.graphics.drawable.GradientDrawable colorBg = new android.graphics.drawable.GradientDrawable();
+                    colorBg.setColor(Color.parseColor("#AD145C")); // fixed pink when logo exists
+                    colorBg.setCornerRadii(new float[]{
+                            cornerRadius, cornerRadius, cornerRadius, cornerRadius, 0, 0, 0, 0});
+
+                    android.graphics.drawable.LayerDrawable layered =
+                            new android.graphics.drawable.LayerDrawable(
+                                    new android.graphics.drawable.Drawable[]{colorBg, bitmapDrawable});
+
+                    view.setBackground(layered);
+                    return;
+                }
+            } catch (Exception ignored) {}
+        }
+
+        // Fallback: risk color only
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(getRiskColor(risk));
         bg.setCornerRadii(new float[]{

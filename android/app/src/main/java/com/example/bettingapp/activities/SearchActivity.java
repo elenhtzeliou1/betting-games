@@ -84,7 +84,8 @@ public class SearchActivity extends AppCompatActivity {
                     game.getRisk(),
                     game.getBetCategory(),
                     game.getStars(),
-                    game.getNoOfVotes()
+                    game.getNoOfVotes(),
+                    game.getGameLogo()
             );
 
             sheet.show(getSupportFragmentManager(), GameBottomSheetFragment.TAG);
@@ -97,7 +98,7 @@ public class SearchActivity extends AppCompatActivity {
         findViewById(R.id.btnSearch).setOnClickListener(v -> performSearch());
     }
 
-    // ── Stars ────────────────────────────────────────────────────────────────
+    // Stars
 
     private void setupStars() {
         stars[0] = findViewById(R.id.star1);
@@ -167,7 +168,7 @@ public class SearchActivity extends AppCompatActivity {
         highlightChips(chips, any);
     }
 
-    // ── Chip highlight helper ─────────────────────────────────────────────────
+    // Chip highlight helper
 
     private void highlightChips(Button[] chips, Button selected) {
         for (Button chip : chips) {
@@ -208,8 +209,9 @@ public class SearchActivity extends AppCompatActivity {
 
     private SearchResult parseGameLine(String line) {
         String[] parts = line.split("\\|");
-        if (parts.length != 11) return null;
+        if (parts.length < 10) return null;
         try {
+            String logo = parts.length >= 11 ? parts[10].trim() : "";
             return new SearchResult(
                     parts[1].trim(),
                     parts[2].trim(),
@@ -220,7 +222,7 @@ public class SearchActivity extends AppCompatActivity {
                     parts[7].trim(),
                     parts[8].trim(),
                     parts[9].trim(),
-                    parts[10].trim()
+                    logo
             );
         } catch (Exception e) {
             return null;

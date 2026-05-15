@@ -50,7 +50,8 @@ public class GamesFragment extends Fragment {
                     game.getRisk(),
                     game.getBetCategory(),
                     game.getStars(),
-                    game.getNoOfVotes()
+                    game.getNoOfVotes(),
+                    game.getGameLogo()
             );
             sheet.show(getChildFragmentManager(), GameBottomSheetFragment.TAG);
         });

@@ -61,8 +61,9 @@ public class GamesViewModel extends ViewModel {
 
     private SearchResult parseLine(String line) {
         String[] parts = line.split("\\|");
-        if (parts.length != 11) return null;
+        if (parts.length < 10) return null;
         try {
+            String logo = parts.length >= 11 ? parts[10].trim() : "";
             return new SearchResult(
                     parts[1].trim(),
                     parts[2].trim(),
@@ -73,7 +74,7 @@ public class GamesViewModel extends ViewModel {
                     parts[7].trim(),
                     parts[8].trim(),
                     parts[9].trim(),
-                    parts[10].trim()
+                    logo
             );
         } catch (Exception e) {
             return null;
