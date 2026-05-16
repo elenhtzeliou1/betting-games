@@ -29,6 +29,7 @@ public class ReducerServer {
     private static final Map<String, SearchJob> searchJobs = new HashMap<>();
     private static final Map<String, ProviderProfitJob> providerJobs = new HashMap<>();
     private static final Map<String, PlayerProfitJob> playerJobs = new HashMap<>();
+    private static final Map<String, UserRatingsJob> userRatingsJobs = new HashMap<>();
 
     // -----------------------------
     // Server starting
@@ -103,8 +104,11 @@ public class ReducerServer {
             else if(firstLine.startsWith("MAP_PLAYER_PROFIT ")){
                 handleMapPlayerProfit(firstLine,in,out);
                 return;
-
+            }else if (firstLine.startsWith("MAP_USER_RATINGS ")) {
+                handleMapUserRatings(firstLine, in, out);
+                return;
             }
+
             out.println("ERROR Unknown reducer command: "+ firstLine);
             out.println("END");
 
@@ -319,6 +323,55 @@ public class ReducerServer {
             if (job == null) {
                 job = new PlayerProfitJob(jobId, playerId, expectedN, masterHost, masterCallbackPort);
                 playerJobs.put(jobId, job);
+                JOBS_LOCK.notifyAll();
+            }
+        }
+
+        job.addPartialResults(partialLines);
+        out.println("ACK");
+    }
+
+    private static void handleMapUserRatings(String firstLine,
+                                             BufferedReader in, PrintWriter out) throws IOException {
+        // Expected: MAP_USER_RATINGS <jobId> <playerId> <expectedN>
+        String[] header = firstLine.trim().split("\\s+");
+        if (header.length != 4) {
+            out.println("ERROR bad MAP_USER_RATINGS header");
+            out.println("END");
+            return;
+        }
+
+        String jobId = header[1].trim();
+        String playerId = header[2].trim();
+        int expectedN;
+        try {
+            expectedN = Integer.parseInt(header[3].trim());
+        } catch (NumberFormatException e) {
+            out.println("ERROR MAP_USER_RATINGS expectedN must be an integer");
+            out.println("END");
+            return;
+        }
+
+        if (jobId.isBlank() || playerId.isBlank() || expectedN <= 0) {
+            out.println("ERROR MAP_USER_RATINGS bad parameters");
+            out.println("END");
+            return;
+        }
+
+        List<String> partialLines = new ArrayList<>();
+        String line;
+        while ((line = in.readLine()) != null) {
+            line = line.trim();
+            if ("END".equals(line)) break;
+            if (!line.isEmpty()) partialLines.add(line);
+        }
+
+        UserRatingsJob job;
+        synchronized (JOBS_LOCK) {
+            job = userRatingsJobs.get(jobId);
+            if (job == null) {
+                job = new UserRatingsJob(jobId, playerId, expectedN, masterHost, masterCallbackPort);
+                userRatingsJobs.put(jobId, job);
                 JOBS_LOCK.notifyAll();
             }
         }

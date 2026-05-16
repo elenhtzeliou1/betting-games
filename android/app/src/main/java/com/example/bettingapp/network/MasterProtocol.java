@@ -21,6 +21,10 @@ public class MasterProtocol {
     public static String rate(String playerId, String gameName, int stars) {
         return "RATE " + playerId + "|" + gameName + "|" + stars;
     }
+
+    public static String getUserRatings(String playerId){
+        return "GET_USER_RATINGS " + playerId;
+    }
     public static String addBalance(String userId, String tokens) {
         return "ADD_BALANCE " + userId + "|" + tokens;
     }

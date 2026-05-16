@@ -53,6 +53,7 @@ public class DummyPlayerApp {
                 System.out.println("4. Rate Game");
                 System.out.println("5. Add Tokens");
                 System.out.println("6. View Balance");
+                System.out.println("7. See your ratings");
                 System.out.println("0. Exit");
 
                 choice=scanner.nextLine().trim();
@@ -95,6 +96,9 @@ public class DummyPlayerApp {
                     case "6":{
                         // View player Balance
                         viewBalance(scanner,output,input);
+                        break;
+                    } case "7":{
+                        getUserRatings(scanner, output,input);
                         break;
                     }
                     default:
@@ -264,6 +268,43 @@ public class DummyPlayerApp {
 
         // Read MasterServer's Response
         readMsgUntilEnd(input);
+    }
+
+    private static void getUserRatings(Scanner scanner, PrintWriter output, BufferedReader input) throws Exception{
+        String playerId = readValidUsername(scanner, "Give PlayerId (e.g. user123): ");
+
+        output.println("GET_USER_RATINGS " + playerId);
+
+        List<String> ratingLines = new ArrayList<>();
+        String line;
+        while ((line = input.readLine()) != null) {
+            if (line.equals("END")) break;
+            line = line.trim();
+            if (line.isBlank()) continue;
+            ratingLines.add(line);
+        }
+
+        if (ratingLines.isEmpty()) {
+            System.out.println("No ratings found for player: " + playerId);
+            return;
+        }
+
+        System.out.println("\n--- RATINGS for " + playerId + " ---");
+        for (String ln : ratingLines) {
+            if (ln.startsWith("RATING|")) {
+                // RATING|gameName|stars
+                String[] parts = ln.split("\\|");
+                if (parts.length == 3) {
+                    System.out.println("  Game: " + parts[1] + "  ->  " + parts[2] + " star(s)");
+                } else {
+                    System.out.println(ln);
+                }
+            } else {
+                // ERROR or unexpected line from server
+                System.out.println(ln);
+            }
+        }
+        System.out.println("-------------------------------");
     }
 
     // ---------------------------------------------------------//

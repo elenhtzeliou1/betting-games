@@ -22,7 +22,9 @@ import com.example.bettingapp.network.SocketTask;
 import com.example.bettingapp.viewmodel.AppViewModel;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class CasinoActivity extends AppCompatActivity {
 
@@ -76,6 +78,12 @@ public class CasinoActivity extends AppCompatActivity {
         new Thread(() -> {
             try {
                 if(!masterConnection.isConnected()) masterConnection.connect();
+
+                // Fetch THIS player's existing ratings from the server
+                List<String> ratingLines = masterConnection.sendCommand(MasterProtocol.getUserRatings(playerId));
+                Map<String, Integer> ratingsMap = parseUserRatings(ratingLines);
+                appViewModel.setUserRatings(ratingsMap);
+
                 runOnUiThread(() -> {
                             loadFragment(new GamesFragment());
                             fetchAndShowBalance(findViewById(R.id.toolbarBalance));
@@ -145,6 +153,25 @@ public class CasinoActivity extends AppCompatActivity {
                 .replace(R.id.fragmentContainer, fragment)
                 .commit();
     }
+
+    // Expected Lines: RATING|gameName|3
+    // Returns a map of gameName (lowercase) -> stars
+    private Map<String, Integer> parseUserRatings(List<String> lines) {
+        Map<String, Integer> map = new HashMap<>();
+        for (String line : lines) {
+            if (!line.startsWith("RATING|")) continue;
+            String[] parts = line.split("\\|");
+            if (parts.length < 3) continue;
+            try {
+                String name = parts[1].trim().toLowerCase();
+                int stars = Integer.parseInt(parts[2].trim());
+
+                map.put(name, stars);
+            } catch (NumberFormatException ignored) {}
+        }
+        return map;
+    }
+
 
     @Override
     protected void onDestroy() {

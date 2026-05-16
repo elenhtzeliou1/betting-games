@@ -89,6 +89,18 @@ public class GameState {
         if (stars < 1 || stars > 5) throw new IllegalArgumentException("Stars must be integer: 1<= Stars <=5");
     }
 
+    public synchronized  int getPlayerRating(String playerId){
+        Rate rate = ratesByPlayerId.get(playerId.trim().toLowerCase());
+        return rate != null ? rate.getStars() : -1;
+    }
+
+    public synchronized Map<String, Integer> getRatingsSnapshot() {
+        Map<String, Integer> snapshot = new HashMap<>();
+        for (Map.Entry<String, Rate> entry : ratesByPlayerId.entrySet()) {
+            snapshot.put(entry.getKey(), entry.getValue().getStars());
+        }
+        return snapshot;
+    }
 
 
 

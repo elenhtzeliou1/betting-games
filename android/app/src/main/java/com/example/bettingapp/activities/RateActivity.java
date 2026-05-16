@@ -23,8 +23,6 @@ import java.util.Locale;
 
 public class RateActivity extends AppCompatActivity {
 
-    private static final String PREFS_NAME = "game_ratings";
-
     public static final String EXTRA_PLAYER_ID = "PLAYER_ID";
 
     private int selectedRating = 0;
@@ -41,6 +39,7 @@ public class RateActivity extends AppCompatActivity {
     private int gameVotes = 0;
 
     private MasterConnection masterConnection;
+    private AppViewModel appViewModel;
 
     // set colors that are used
     private final int pink = Color.parseColor("#E91E83");
@@ -52,7 +51,7 @@ public class RateActivity extends AppCompatActivity {
         setContentView(R.layout.activity_rate);
 
         // Get connection & player id from AppViewModel (main Thread)
-        AppViewModel appViewModel = new ViewModelProvider(this).get(AppViewModel.class);
+        appViewModel = new ViewModelProvider(this).get(AppViewModel.class);
         masterConnection = appViewModel.getConnection();
 
         playerId = getIntent().getStringExtra(EXTRA_PLAYER_ID);
@@ -119,7 +118,7 @@ public class RateActivity extends AppCompatActivity {
         };
 
         // Restore saved rating (if the player already rated the game)
-        int savedRating = getSavedRating();
+        int savedRating = appViewModel.getRating(gameName);
         if (savedRating > 0){
             selectedRating = savedRating;
             updateStars();
@@ -157,14 +156,14 @@ public class RateActivity extends AppCompatActivity {
             public void onSuccess(List<String> lines) {
                 // Worker sends ERROR when the player already rated
                 if (!lines.isEmpty() && lines.get(0).startsWith("ERROR")) {
-                    saveRating(selectedRating);
+                    appViewModel.saveRating(gameName, selectedRating);
                     lockRatingUI();
                     Toast.makeText(RateActivity.this,
                             "You have already rated this game", Toast.LENGTH_SHORT).show();
                     return;
                 }
 
-                saveRating(selectedRating);
+                appViewModel.saveRating(gameName, selectedRating);
 
                 gameStars = (gameStars * gameVotes + selectedRating) / (gameVotes + 1);
                 gameVotes = gameVotes + 1;
@@ -240,7 +239,7 @@ public class RateActivity extends AppCompatActivity {
             star.setClickable(false);
         }
 
-        // Replace submit button with a locked indicator
+        // Replace submit button with a locked indicator so we not allow reating again
         submitButton.setEnabled(false);
         submitButton.setText("Already rated");
         submitButton.setTextColor(pink);
@@ -260,27 +259,11 @@ public class RateActivity extends AppCompatActivity {
     private String getRatingKey() {
         return "rated_" + playerId + "_" + gameName.trim().toLowerCase();
     }
-
-    /** Persist the rating so it survives app restarts. */
-    private void saveRating(int rating) {
-        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                .edit()
-                .putInt(getRatingKey(), rating)
-                .apply();
-    }
-
-    // Returns 0 if the player has not rated this game yet.
-    private int getSavedRating() {
-        return getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                .getInt(getRatingKey(), 0);
-    }
-
-
     private boolean isEmpty(String value) {
         return value == null || value.trim().isEmpty();
     }
 
-    // "high risk" -> "High risk"
+    // "high risk" -> "High risk" (unused)
     private String capitalize(String value) {
         if (isEmpty(value)) return value;
         String v = value.trim();

@@ -122,6 +122,9 @@ public class WorkerServer {
             }else if(inputString.startsWith("PLAY ")){
                 handlePlayRequest(inputString,output);
                 return;
+            }else if (inputString.startsWith("MAP_USER_RATINGS ")){
+                handleMapUserRatings(inputString, output);
+                return;
             }
 
             output.println("ERROR unknown worker command: " + inputString);
@@ -850,6 +853,69 @@ public class WorkerServer {
         }
     }
 
+    private static void handleMapUserRatings(String inputString, PrintWriter output) {
+        // MAP_USER_RATINGS jobId|playerId|reducerHost|reducerPort|expectedN|workerIndex|totalWorkers|aliveIndices
+        String payload = inputString.substring("MAP_USER_RATINGS ".length()).trim();
+        String[] parts = payload.split("\\|");
+        if (parts.length != 8) {
+            output.println("ERROR bad MAP_USER_RATINGS format");
+            output.println("END");
+            return;
+        }
+
+        String jobId = parts[0].trim();
+        String playerId = parts[1].trim().toLowerCase();
+        String reducerHost = parts[2].trim();
+        int reducerPort = Integer.parseInt(parts[3].trim());
+        int expectedN = Integer.parseInt(parts[4].trim());
+        int myIndex = Integer.parseInt(parts[5].trim());
+        int totalWorkers = Integer.parseInt(parts[6].trim());
+        String aliveIndicesStr = parts[7].trim();
+
+        Set<Integer> aliveSet = new HashSet<>();
+        for (String idx : aliveIndicesStr.split(",")) {
+            try { aliveSet.add(Integer.parseInt(idx.trim())); } catch (Exception ignored) {}
+        }
+
+        List<String> ratingLines = new ArrayList<>();
+
+        // Iterate only over primary games this worker owns (same guard as MAP_SEARCH)
+        List<Map.Entry<String, GameState>> snapshot;
+        synchronized (gamesByName) {
+            snapshot = new ArrayList<>(gamesByName.entrySet());
+        }
+        for (Map.Entry<String, GameState> entry : snapshot) {
+            String gameName = entry.getKey();
+            GameState state = entry.getValue();
+
+            if (!shouldReportGame(gameName, myIndex, totalWorkers, aliveSet)) continue;
+
+            int stars = state.getPlayerRating(playerId);
+            if (stars != -1) {
+                ratingLines.add("RATING|" + gameName + "|" + stars);
+            }
+        }
+
+        // Push MAP result to Reducer (same pattern as all other MAP handlers ;))
+        try (Socket s = new Socket(reducerHost, reducerPort);
+             BufferedReader reader = new BufferedReader(new InputStreamReader(s.getInputStream()));
+             PrintWriter writer = new PrintWriter(s.getOutputStream(), true)) {
+
+            writer.println("MAP_USER_RATINGS " + jobId + " " + playerId + " " + expectedN);
+            for (String ln : ratingLines) writer.println(ln);
+            writer.println("END");
+
+            String ack = reader.readLine();
+            System.out.println("[Worker] MAP_USER_RATINGS Reducer replied: " + ack);
+
+        } catch (Exception e) {
+            System.out.println("[Worker] MAP_USER_RATINGS push to Reducer failed: " + e.getMessage());
+        }
+
+        output.println("OK MAP_USER_RATINGS sent to Reducer");
+        output.println("END");
+    }
+
     private static void handleGameRate(String inputString, PrintWriter output){
         String payload = inputString.substring("RATE ".length()).trim();
         String[] parts = payload.split("\\|");
@@ -1134,6 +1200,8 @@ public class WorkerServer {
             default -> throw new IllegalArgumentException("Unknown risk level: " + riskLevel);
         };
     }
+
+
 
     private static String deriveBetCategory(BigDecimal minBet) {
         if (minBet.compareTo(BigDecimal.valueOf(5)) >= 0) {

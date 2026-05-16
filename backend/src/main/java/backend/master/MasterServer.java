@@ -255,6 +255,9 @@ public class MasterServer {
         } else if (inputString.startsWith("VIEW_BALANCE ")) {
             handlePlayerViewBalanceRequest(inputString,output);
             return;
+        } else if (inputString.startsWith("GET_USER_RATINGS ")){
+            handlePlayerGetUserRatings(inputString, output);
+            return;
         }
         output.println("ERROR unknown player command");
         output.println("END");
@@ -591,6 +594,79 @@ public class MasterServer {
             if(!ln.isBlank()) output.println(ln);
         }
         output.println("END");
+    }
+
+    private static void  handlePlayerGetUserRatings(String inputString, PrintWriter output){
+        String playerId = inputString.substring("GET_USER_RATINGS ".length()).trim().toLowerCase();
+
+        if (playerId.isBlank()) {
+            output.println("ERROR GET_USER_RATINGS: playerId is required");
+            output.println("END");
+            return;
+        }
+
+        String jobId = UUID.randomUUID().toString();
+        List<Worker> aliveWorkers = new ArrayList<>();
+        for (Worker w : workers) {
+            if (isWorkerAlive(w)) {
+                aliveWorkers.add(w);
+            } else {
+                System.out.println("[MasterServer] Worker " + w + " is down, skipping GET_USER_RATINGS MapReduce");
+            }
+        }
+
+        if (aliveWorkers.isEmpty()) {
+            output.println("ERROR No workers available");
+            output.println("END");
+            return;
+        }
+
+        int totalWorkers   = workers.size();
+        int expectedWorkers = aliveWorkers.size();
+
+        StringBuilder aliveIdxSb = new StringBuilder();
+        for (int i = 0; i < aliveWorkers.size(); i++) {
+            if (i > 0) aliveIdxSb.append(",");
+            aliveIdxSb.append(workers.indexOf(aliveWorkers.get(i)));
+        }
+        String aliveIndicesStr = aliveIdxSb.toString();
+
+        // MAP: each alive worker scans its primary games for this player's ratings
+        for (Worker w : aliveWorkers) {
+            final int workerIndex = workers.indexOf(w);
+            final String mapCmd = "MAP_USER_RATINGS " + jobId + "|" + playerId + "|"
+                    + reducerHost + "|" + reducerPort + "|" + expectedWorkers
+                    + "|" + workerIndex + "|" + totalWorkers + "|" + aliveIndicesStr;
+            new Thread(() -> forwardMsgToWorker(w, mapCmd)).start();
+        }
+
+        // Wait for Reducer to push back
+        String key = "USER_RATINGS|" + jobId;
+        String finalResult;
+
+        long deadline = System.currentTimeMillis() + 10_000;
+        synchronized (reduceLock) {
+            while (!pendingReduceResults.containsKey(key)) {
+                long remain = deadline - System.currentTimeMillis();
+                if (remain <= 0) break;
+                try { reduceLock.wait(remain); }
+                catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
+            }
+            finalResult = pendingReduceResults.remove(key);
+        }
+
+        if (finalResult == null) {
+            output.println("ERROR GET_USER_RATINGS timeout");
+            output.println("END");
+            return;
+        }
+
+        // Send RATING lines to player (empty response = player has no ratings yet)
+        for (String ln : finalResult.split("\n")) {
+            if (!ln.isBlank()) output.println(ln);
+        }
+        output.println("END");
+
     }
 
     // Method that forwards a single request from the Master to a specific (chosen) Worker over TCP and returns worker's reply
@@ -1419,6 +1495,26 @@ public class MasterServer {
                 System.out.println("[MasterServer] Got player profit reduce result for player="
                         + playerId + " jobId=" + jobId);
 
+                output.println("ACK");
+                return;
+            }
+            if (header.startsWith("REDUCE_USER_RATINGS_RESULT ")) {
+                String payload = header.substring("REDUCE_USER_RATINGS_RESULT ".length()).trim();
+                String[] parts = payload.split("\\|");
+                if (parts.length != 2) {
+                    output.println("ERROR bad REDUCE_USER_RATINGS_RESULT header");
+                    return;
+                }
+                String jobId    = parts[0].trim();
+                String playerId = parts[1].trim();
+                String key = "USER_RATINGS|" + jobId;
+
+                synchronized (reduceLock) {
+                    pendingReduceResults.put(key, stringBuilder.toString().trim());
+                    reduceLock.notifyAll();
+                }
+
+                System.out.println("[MasterServer] Got user ratings reduce result for player=" + playerId);
                 output.println("ACK");
                 return;
             }
