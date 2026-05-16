@@ -22,8 +22,10 @@ import com.example.bettingapp.network.SocketTask;
 import com.example.bettingapp.viewmodel.AppViewModel;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public class CasinoActivity extends AppCompatActivity {
@@ -115,7 +117,13 @@ public class CasinoActivity extends AppCompatActivity {
                 if (!lines.isEmpty()) {
                     String line = lines.get(0);
                     if (line.contains("Balance: ")) {
-                        balance = line.substring(line.lastIndexOf("Balance: ") + 9).trim();
+                        String raw = line.substring(line.lastIndexOf("Balance: ") + 9).trim();
+                        try {
+                            balance = String.format(Locale.US, "%.2f",
+                                    new BigDecimal(raw).doubleValue());
+                        } catch (Exception ignored) {
+                            balance = raw;
+                        }
                     }
                 }
                 String display = balance + " FUN";

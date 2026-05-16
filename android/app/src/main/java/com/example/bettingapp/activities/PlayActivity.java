@@ -28,16 +28,18 @@ import java.math.RoundingMode;
 import java.util.List;
 import java.util.Locale;
 
+import com.example.bettingapp.model.BetResult;
+
 public class PlayActivity extends AppCompatActivity {
 
-    // ── Intent extra keys ─────────────────────────────────────────────────────
+    // Intent extra keys
     public static final String EXTRA_PLAYER_ID = "PLAYER_ID";
     public static final String EXTRA_GAME_NAME = "GAME_NAME";
     public static final String EXTRA_PROVIDER = "GAME_PROVIDER";
     public static final String EXTRA_BET_CATEGORY = "GAME_BET_CATEGORY";
     public static final String EXTRA_RISK = "GAME_RISK";
     public static final String EXTRA_MIN_BET = "GAME_MIN_BET";
-    public static final String EXTRA_MAX_BET  = "GAME_MAX_BET";
+    public static final String EXTRA_MAX_BET = "GAME_MAX_BET";
     public static final String EXTRA_JACKPOT = "GAME_JACKPOT";
 
     // Highest non-jackpot payout multiplier across all risk tables (HIGH, index 9)
@@ -55,7 +57,7 @@ public class PlayActivity extends AppCompatActivity {
 
     private static final int FADE_MS = 220;
 
-    // ── Game data ─────────────────────────────────────────────────────────────
+    // Game data
     private String playerId;
     private String gameName;
     private String risk;
@@ -64,7 +66,7 @@ public class PlayActivity extends AppCompatActivity {
     private BigDecimal step;
     private BigDecimal currentBet;
 
-    // ── Views ─────────────────────────────────────────────────────────────────
+    // Views
     private View heroContainer;
     private View heroDefault;
     private View heroLoading;
@@ -85,7 +87,7 @@ public class PlayActivity extends AppCompatActivity {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private int heroTransitionId = 0;
 
-    // ── Lifecycle ─────────────────────────────────────────────────────────────
+    // Lifecycle
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -115,17 +117,17 @@ public class PlayActivity extends AppCompatActivity {
         String provider = getIntent().getStringExtra(EXTRA_PROVIDER);
         String betCategory = getIntent().getStringExtra(EXTRA_BET_CATEGORY);
         risk = getIntent().getStringExtra(EXTRA_RISK);
-        double minBetD = getIntent().getDoubleExtra(EXTRA_MIN_BET,  1.0);
-        double maxBetD = getIntent().getDoubleExtra(EXTRA_MAX_BET,  100.0);
-        double jackpotD = getIntent().getDoubleExtra(EXTRA_JACKPOT,  10.0);
+        double minBetD = getIntent().getDoubleExtra(EXTRA_MIN_BET, 1.0);
+        double maxBetD = getIntent().getDoubleExtra(EXTRA_MAX_BET, 100.0);
+        double jackpotD = getIntent().getDoubleExtra(EXTRA_JACKPOT, 10.0);
 
         minBet = BigDecimal.valueOf(minBetD).setScale(2, RoundingMode.HALF_UP);
-        maxBet  = BigDecimal.valueOf(maxBetD).setScale(2, RoundingMode.HALF_UP);
+        maxBet = BigDecimal.valueOf(maxBetD).setScale(2, RoundingMode.HALF_UP);
         currentBet = minBet;
         step = deriveStep(minBet);
 
         // --- Toolbar ---
-        ((TextView) findViewById(R.id.toolbarTitle)).setText("Play");
+        ((TextView) findViewById(R.id.toolbarTitle)).setText("PLAY");
         toolbarBalance = findViewById(R.id.toolbarBalance);
         findViewById(R.id.btnBack).setOnClickListener(v -> finish());
         fetchBalance();
@@ -166,29 +168,29 @@ public class PlayActivity extends AppCompatActivity {
         });
 
         // --- Bet control ---
-        tvBetAmount         = findViewById(R.id.tvBetAmount);
-        tvBetHint           = findViewById(R.id.tvBetHint);
-        btnBetMinus         = findViewById(R.id.btnBetMinus);
-        btnBetPlus          = findViewById(R.id.btnBetPlus);
-        btnPlaceBet         = findViewById(R.id.btnPlaceBet);
+        tvBetAmount = findViewById(R.id.tvBetAmount);
+        tvBetHint = findViewById(R.id.tvBetHint);
+        btnBetMinus = findViewById(R.id.btnBetMinus);
+        btnBetPlus = findViewById(R.id.btnBetPlus);
+        btnPlaceBet = findViewById(R.id.btnPlaceBet);
         btnPlaceBetProgress = findViewById(R.id.btnPlaceBetProgress);
 
         updateBetDisplay();
         btnBetMinus.setOnClickListener(v -> adjustBet(false));
-        btnBetPlus .setOnClickListener(v -> adjustBet(true));
+        btnBetPlus.setOnClickListener(v -> adjustBet(true));
 
         // Place bet is the single trigger for all plays — initial and replays
         btnPlaceBet.setOnClickListener(v -> placeBet());
     }
 
-    // ── Hero state machine ────────────────────────────────────────────────────
+    // Hero state machine
 
-    private enum HeroState { DEFAULT, LOADING, RESULT }
+    private enum HeroState {DEFAULT, LOADING, RESULT}
 
     private void transitionHero(HeroState state, BetResult result) {
         final int transitionId = ++heroTransitionId;
         final View nextView = viewForState(state);
-        final int  nextBg   = bgForResult(state, result);
+        final int nextBg = bgForResult(state, result);
 
         for (View v : new View[]{heroDefault, heroLoading, heroResult}) {
             v.animate().setListener(null);
@@ -207,7 +209,8 @@ public class PlayActivity extends AppCompatActivity {
                         .alpha(0f)
                         .setDuration(FADE_MS)
                         .setListener(new AnimatorListenerAdapter() {
-                            @Override public void onAnimationEnd(Animator a) {
+                            @Override
+                            public void onAnimationEnd(Animator a) {
                                 if (transitionId == heroTransitionId) {
                                     toHide.setVisibility(View.GONE);
                                     toHide.setAlpha(1f);
@@ -227,9 +230,12 @@ public class PlayActivity extends AppCompatActivity {
 
     private View viewForState(HeroState state) {
         switch (state) {
-            case LOADING: return heroLoading;
-            case RESULT:  return heroResult;
-            default:      return heroDefault;
+            case LOADING:
+                return heroLoading;
+            case RESULT:
+                return heroResult;
+            default:
+                return heroDefault;
         }
     }
 
@@ -237,7 +243,7 @@ public class PlayActivity extends AppCompatActivity {
         if (state == HeroState.LOADING) return BG_LOADING;
         if (state == HeroState.RESULT && result != null) {
             if (result.isJackpot) return BG_JACKPOT;
-            return result.isWin   ? BG_WIN : BG_LOSS;
+            return result.isWin ? BG_WIN : BG_LOSS;
         }
         return BG_DEFAULT;
     }
@@ -250,7 +256,7 @@ public class PlayActivity extends AppCompatActivity {
         tvResultBalance.setText(r.balanceLine);
     }
 
-    // ── Bet control ───────────────────────────────────────────────────────────
+    // Bet control
 
     private void adjustBet(boolean increase) {
         if (increase) {
@@ -268,7 +274,7 @@ public class PlayActivity extends AppCompatActivity {
         tvBetHint.setText(String.format(Locale.US,
                 "Min: %.2f  ·  Max: %.2f", minBet.doubleValue(), maxBet.doubleValue()));
         btnBetMinus.setAlpha(currentBet.compareTo(minBet) <= 0 ? 0.35f : 1f);
-        btnBetPlus .setAlpha(currentBet.compareTo(maxBet) >= 0 ? 0.35f : 1f);
+        btnBetPlus.setAlpha(currentBet.compareTo(maxBet) >= 0 ? 0.35f : 1f);
     }
 
     /**
@@ -277,7 +283,7 @@ public class PlayActivity extends AppCompatActivity {
      */
     private void setControlsLocked(boolean locked) {
         btnBetMinus.setEnabled(!locked);
-        btnBetPlus .setEnabled(!locked);
+        btnBetPlus.setEnabled(!locked);
         btnPlaceBet.setEnabled(!locked);
 
         // Toggle the in-button spinner
@@ -285,7 +291,7 @@ public class PlayActivity extends AppCompatActivity {
             btnPlaceBet.setText("");
             btnPlaceBetProgress.setVisibility(View.VISIBLE);
             btnBetMinus.setAlpha(0.35f);
-            btnBetPlus .setAlpha(0.35f);
+            btnBetPlus.setAlpha(0.35f);
             // Also lock min/max shortcut cards
             findViewById(R.id.cardMinBet).setEnabled(false);
             findViewById(R.id.cardMaxBet).setEnabled(false);
@@ -299,7 +305,7 @@ public class PlayActivity extends AppCompatActivity {
         }
     }
 
-    // ── Network — place bet ───────────────────────────────────────────────────
+    // Network — place bet
 
     private void placeBet() {
         // Lock everything and show hero loading state
@@ -312,7 +318,7 @@ public class PlayActivity extends AppCompatActivity {
             @Override
             public void onSuccess(List<String> lines) {
                 String playResultLine = null;
-                String newBalance     = null;
+                String newBalance = null;
 
                 for (String line : lines) {
                     if (line.startsWith("PLAY_RESULT")) playResultLine = line;
@@ -332,7 +338,13 @@ public class PlayActivity extends AppCompatActivity {
                 BigDecimal payout = parsePayout(playResultLine);
 
                 // Update the balance pill immediately
-                if (newBalance != null) toolbarBalance.setText(newBalance + " FUN");
+                if (newBalance != null) {
+                    try {
+                        newBalance = String.format(Locale.US, "%.2f",
+                                new BigDecimal(newBalance).doubleValue());
+                    } catch (Exception ignored) {}
+                    toolbarBalance.setText(newBalance + " FUN");
+                }
 
                 // Show result in the hero, keep controls locked during cooldown
                 BetResult result = BetResult.from(payout, currentBet, newBalance);
@@ -352,7 +364,7 @@ public class PlayActivity extends AppCompatActivity {
         }).start();
     }
 
-    // ── Network — balance ─────────────────────────────────────────────────────
+    // Network - balance
 
     private void fetchBalance() {
         new SocketTask(masterConnection, MasterProtocol.viewBalance(playerId),
@@ -363,14 +375,19 @@ public class PlayActivity extends AppCompatActivity {
                 String line = lines.get(0);
                 if (line.contains("Balance: ")) {
                     String bal = line.substring(line.lastIndexOf("Balance: ") + 9).trim();
+                    try {
+                        bal = String.format(Locale.US, "%.2f", new BigDecimal(bal).doubleValue());
+                    } catch (Exception ignored) {}
                     toolbarBalance.setText(bal + " FUN");
                 }
             }
-            @Override public void onError(String message) { /* keep placeholder */ }
+
+            @Override
+            public void onError(String message) { /* keep placeholder */ }
         }).start();
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    //Helpers
 
     private BigDecimal parsePayout(String line) {
         try {
@@ -379,7 +396,8 @@ public class PlayActivity extends AppCompatActivity {
                 if (t.startsWith("payout="))
                     return new BigDecimal(t.substring("payout=".length()).trim());
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         return BigDecimal.ZERO;
     }
 
@@ -390,75 +408,25 @@ public class PlayActivity extends AppCompatActivity {
         badge.setText(raw);
         int color;
         switch (raw.toLowerCase()) {
-            case "high":   color = Color.parseColor("#FF4444"); break;
-            case "medium": color = Color.parseColor("#FFA500"); break;
-            default:       color = Color.parseColor("#44BB44"); break;
+            case "high":
+                color = Color.parseColor("#FF4444");
+                break;
+            case "medium":
+                color = Color.parseColor("#FFA500");
+                break;
+            default:
+                color = Color.parseColor("#44BB44");
+                break;
         }
         badge.setBackgroundTintList(ColorStateList.valueOf(color));
     }
 
     private BigDecimal deriveStep(BigDecimal minBet) {
-        if (minBet.compareTo(BigDecimal.ONE) < 0)         return new BigDecimal("0.10");
-        if (minBet.compareTo(BigDecimal.valueOf(5)) < 0)  return new BigDecimal("1.00");
-        return new BigDecimal("5.00");
+        return new BigDecimal("0.01");
     }
 
-    private boolean isEmpty(String s) { return s == null || s.trim().isEmpty(); }
-
-    // ── BetResult value object ────────────────────────────────────────────────
-
-    private static final class BetResult {
-
-        final boolean isJackpot;
-        final boolean isWin;
-        final String title;
-        final int titleColour;
-        final String payoutLine;
-        final int payoutColour;
-        final String balanceLine;
-
-        private BetResult(boolean isJackpot, boolean isWin,
-                          String title, int titleColour,
-                          String payoutLine, int payoutColour,
-                          String balanceLine) {
-            this.isJackpot    = isJackpot;
-            this.isWin = isWin;
-            this.title  = title;
-            this.titleColour  = titleColour;
-            this.payoutLine   = payoutLine;
-            this.payoutColour = payoutColour;
-            this.balanceLine  = balanceLine;
-        }
-
-        static BetResult from(BigDecimal payout, BigDecimal bet, String newBalance) {
-            boolean isJackpot = payout.compareTo(bet.multiply(MAX_NORMAL_MULTIPLIER)) > 0;
-            boolean isWin     = payout.compareTo(BigDecimal.ZERO) > 0;
-
-            String title;
-            int    titleColour;
-            String payoutLine;
-            int    payoutColour;
-
-            if (isJackpot) {
-                title = "JACKPOT!";
-                titleColour = Color.parseColor("#FFD700");
-                payoutLine = "+" + String.format(Locale.US, "%.2f FUN", payout.doubleValue());
-                payoutColour = Color.parseColor("#FFD700");
-            } else if (isWin) {
-                title = "YOU WON!";
-                titleColour = Color.parseColor("#4CAF50");
-                payoutLine = "+" + String.format(Locale.US, "%.2f FUN", payout.doubleValue());
-                payoutColour = Color.parseColor("#4CAF50");
-            } else {
-                title = "NO LUCK";
-                titleColour = Color.parseColor("#FF5252");
-                payoutLine = "−" + String.format(Locale.US, "%.2f FUN", bet.doubleValue());
-                payoutColour = Color.parseColor("#FF5252");
-            }
-
-            String balanceLine = newBalance != null ? "Balance:  " + newBalance + " FUN" : "";
-            return new BetResult(isJackpot, isWin, title, titleColour,
-                    payoutLine, payoutColour, balanceLine);
-        }
+    private boolean isEmpty(String s) {
+        return s == null || s.trim().isEmpty();
     }
+
 }
